@@ -1,0 +1,5 @@
+python-pyo (0.01-1) lucid; urgency=low
+
+  * Initial packaging
+
+ -- Alexandre Quessy <alexandre@quessy.net>  Tue, 21 Sep 2010 12:06:08 -0400

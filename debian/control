@@ -1,0 +1,34 @@
+Source: python-pyo
+Section: python
+Priority: optional
+Maintainer: Alexandre Quessy <alexandre@quessy.net>
+Build-Depends: python-support (>= 0.90), debhelper (>= 7), python, python-setuptools, liblo-dev, libsndfile1-dev, portaudio19-dev
+Build-Depends-Indep: python-twisted
+XS-Python-Version: all
+Standards-Version: 3.8.4
+Homepage: http://code.google.com/p/pyo/
+
+Package: python-pyo
+Architecture: all
+Depends: ${misc:Depends}, ${python:Depends}, ${shlibs:Depends}
+Description: Python module for audio digital signal processing
+ pyo is a Python module written in C to help digital signal processing
+ script creation.
+ .
+ pyo is a Python module containing classes for a wide variety of audio
+ signal processing types. With pyo, user will be able to include signal
+ processing chains directly in Python scripts or projects, and to 
+ manipulate them in real time through the interpreter.
+ .
+ Tools in pyo module offer primitives, like mathematical operations on
+ audio signal, basic signal processing (filters, delays, synthesis
+ generators, etc.), but also complex algorithms to create sound
+ granulation and others creative audio manipulations.
+ .
+ pyo supports OSC protocol (Open Sound Control), to ease communications
+ between software, and MIDI protocol, for generating sound events and
+ controlling process parameters. 
+ .
+ pyo allows creation of sophisticated signal processing chains with
+ all the benefits of a mature, and wildly used, general programming
+ language.
