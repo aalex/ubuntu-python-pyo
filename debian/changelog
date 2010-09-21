@@ -1,3 +1,9 @@
+python-pyo (0.01-2) lucid; urgency=low
+
+  * Adding missing build-deps
+
+ -- Alexandre Quessy <alexandre@quessy.net>  Tue, 21 Sep 2010 13:41:31 -0400
+
 python-pyo (0.01-1) lucid; urgency=low
 
   * Initial packaging
