@@ -3,13 +3,12 @@ Section: python
 Priority: optional
 Maintainer: Alexandre Quessy <alexandre@quessy.net>
 Build-Depends: python-support (>= 0.90), debhelper (>= 7), python, python-setuptools, liblo-dev, libsndfile1-dev, portaudio19-dev, libportmidi-dev, python-dev
-Build-Depends-Indep: python-twisted
 XS-Python-Version: all
 Standards-Version: 3.8.4
 Homepage: http://code.google.com/p/pyo/
 
 Package: python-pyo
-Architecture: all
+Architecture: any
 Depends: ${misc:Depends}, ${python:Depends}, ${shlibs:Depends}
 Description: Python module for audio digital signal processing
  pyo is a Python module written in C to help digital signal processing

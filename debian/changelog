@@ -1,3 +1,10 @@
+python-pyo (0.01-3) lucid; urgency=low
+
+  * Fixed wrong architecture so that it builds for AMD64 too.
+  * Removed useless build-dep Twisted.
+
+ -- Alexandre Quessy <alexandre@quessy.net>  Wed, 22 Sep 2010 07:49:55 -0400
+
 python-pyo (0.01-2) lucid; urgency=low
 
   * Adding missing build-deps
