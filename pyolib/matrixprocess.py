@@ -88,11 +88,11 @@ class MatrixRec(PyoObject):
     >>> fmrat = Sine(.33, 0, .05, .5)
     >>> aa = FM(carrier=10, ratio=fmrat, index=fmind)
     >>> rec = MatrixRec(aa, mm, 0).play()
-    >>> lfrow = Sine(.1, 0, .24, .25)
-    >>> lfcol = Sine(.15, 0, .124, .25)
-    >>> row = Sine(1000, 0, lfrow, .5)
-    >>> col = Sine(1.5, 0, lfcol, .5)
-    >>> c = MatrixPointer(mm, row, col, .5).out()
+    >>> lfx = Sine(.1, 0, .24, .25)
+    >>> lfy = Sine(.15, 0, .124, .25)
+    >>> x = Sine(1000, 0, lfx, .5)
+    >>> y = Sine(1.5, 0, lfy, .5)
+    >>> c = MatrixPointer(mm, x, y, .5).out()
     
     """
     def __init__(self, input, matrix, fadetime=0):
@@ -126,9 +126,10 @@ class MatrixRec(PyoObject):
         else:
             print "'i' too large!"         
 
-    def play(self):
-        self._base_objs = [obj.play() for obj in self._base_objs]
-        self._trig_objs = [obj.play() for obj in self._trig_objs]
+    def play(self, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
+        self._trig_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._trig_objs)]
         return self
 
     def stop(self):
@@ -136,8 +137,8 @@ class MatrixRec(PyoObject):
         [obj.stop() for obj in self._trig_objs]
         return self
 
-    def out(self, chnl=0, inc=1):
-        pass
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        return self
 
     def setMul(self, x):
         pass
@@ -174,9 +175,9 @@ class MatrixRec(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setMatrix(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
       
     @property
     def input(self):
@@ -202,22 +203,22 @@ class MatrixPointer(PyoObject):
     
     matrix : PyoMatrixObject
         Matrix containing the waveform samples.
-    indexrow : PyoObject
+    x : PyoObject
         Normalized X position in the matrix between 0 and 1.
-    indexcol : PyoObject
+    y : PyoObject
         Normalized Y position in the matrix between 0 and 1.
         
     Methods:
 
     setMatrix(x) : Replace the `matrix` attribute.
-    setIndexRow(x) : Replace the `indexrow` attribute.
-    setIndexCol(x) : Replace the `indexcol` attribute
+    setX(x) : Replace the `x` attribute.
+    setY(x) : Replace the `y` attribute
 
     Attributes:
     
     matrix : PyoMatrixObject. Matrix containing the waveform samples.
-    indexrow : PyoObject. X pointer position in the matrix.
-    indexcol : PyoObject. Y pointer position in the matrix.
+    x : PyoObject. X pointer position in the matrix.
+    y : PyoObject. Y pointer position in the matrix.
     
     Examples:
     
@@ -229,26 +230,25 @@ class MatrixPointer(PyoObject):
     >>> fmrat = Sine(.33, 0, .05, .5)
     >>> aa = FM(carrier=10, ratio=fmrat, index=fmind)
     >>> rec = MatrixRec(aa, mm, 0).play()
-    >>> lfrow = Sine(.1, 0, .24, .25)
-    >>> lfcol = Sine(.15, 0, .124, .25)
-    >>> row = Sine(1000, 0, lfrow, .5)
-    >>> col = Sine(1.5, 0, lfcol, .5)
-    >>> c = MatrixPointer(mm, row, col, .5).out()
+    >>> lfx = Sine(.1, 0, .24, .25)
+    >>> lfy = Sine(.15, 0, .124, .25)
+    >>> x = Sine(1000, 0, lfx, .5)
+    >>> y = Sine(1.5, 0, lfy, .5)
+    >>> c = MatrixPointer(mm, x, y, .5).out()
 
     """
-    def __init__(self, matrix, indexrow, indexcol, mul=1, add=0):
+    def __init__(self, matrix, x, y, mul=1, add=0):
         PyoObject.__init__(self)
         self._matrix = matrix
-        self._indexrow = indexrow
-        self._indexcol = indexcol
+        self._x = x
+        self._y = y
         self._mul = mul
         self._add = add
-        matrix, indexrow, indexcol, mul, add, lmax = convertArgsToLists(matrix, indexrow, indexcol, mul, add)
-        print matrix
-        self._base_objs = [MatrixPointer_base(wrap(matrix,i), wrap(indexrow,i), wrap(indexcol,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
+        matrix, x, y, mul, add, lmax = convertArgsToLists(matrix, x, y, mul, add)
+        self._base_objs = [MatrixPointer_base(wrap(matrix,i), wrap(x,i), wrap(y,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
 
     def __dir__(self):
-        return ['matrix', 'indexrow', 'indexcol', 'mul', 'add']
+        return ['matrix', 'x', 'y', 'mul', 'add']
 
     def setMatrix(self, x):
         """
@@ -264,37 +264,37 @@ class MatrixPointer(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setMatrix(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def setIndexRow(self, x):
+    def setX(self, x):
         """
-        Replace the `indexrow` attribute.
+        Replace the `x` attribute.
         
         Parameters:
 
         x : PyoObject
-            new `indexrow` attribute.
+            new `x` attribute.
         
         """
-        self._indexrow = x
+        self._x = x
         x, lmax = convertArgsToLists(x)
-        [obj.setIndexRow(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+        [obj.setX(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def setIndexCol(self, x):
+    def setY(self, x):
         """
-        Replace the `indexcol` attribute.
+        Replace the `y` attribute.
         
         Parameters:
 
-        x : PyoObject
-            new `indexcol` attribute.
+        y : PyoObject
+            new `y` attribute.
         
         """
-        self._indexcol = x
+        self._y = x
         x, lmax = convertArgsToLists(x)
-        [obj.setIndexCol(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+        [obj.setY(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def matrix(self):
@@ -304,15 +304,163 @@ class MatrixPointer(PyoObject):
     def matrix(self, x): self.setMatrix(x)
 
     @property
-    def indexrow(self):
-        """PyoObject. Row index pointer position in the matrix.""" 
-        return self._indexrow
-    @indexrow.setter
-    def indexrow(self, x): self.setIndexRow(x)
+    def x(self):
+        """PyoObject. Normalized X position in the matrix.""" 
+        return self._x
+    @x.setter
+    def x(self, x): self.setX(x)
 
     @property
-    def indexcol(self):
-        """PyoObject. Column index pointer position in the matrix.""" 
-        return self._indexcol
-    @indexcol.setter
-    def indexcol(self, x): self.setIndexCol(x)
+    def y(self):
+        """PyoObject. Normalized Y position in the matrix.""" 
+        return self._y
+    @y.setter
+    def y(self, x): self.setY(x)
+
+class MatrixMorph(PyoObject):
+    """
+    Morphs between multiple PyoMatrixObjects.
+
+    Uses an index into a list of PyoMatrixObjects to morph between adjacent 
+    matrices in the list. The resulting morphed function is written into the 
+    `matrix` object at the beginning of each buffer size. The matrices in the 
+    list and the resulting matrix must be equal in size.
+
+    Parent class: PyoObject
+
+    Parameters:
+
+    input : PyoObject
+        Morphing index between 0 and 1. 0 is the first matrix in the list 
+        and 1 is the last.
+    matrix : NewMatrix
+        The matrix where to write morphed function.
+    sources : list of PyoMatrixObject
+        List of matrices to interpolate from.
+
+    Methods:
+
+    setInput(x, fadetime) : Replace the `input` attribute.
+    setMatrix(x) : Replace the `matrix` attribute.
+    setSources(x) : Replace the `sources` attribute.
+
+    Attributes:
+
+    input : PyoObject. Morphing index between 0 and 1.
+    matrix : NewMatrix. The matrix where to write samples.
+    sources : list of PyoMatrixObject. List of matrices to interpolate from.
+
+    Notes:
+
+    The out() method is bypassed. MatrixMorph returns no signal.
+
+    MatrixMorph has no `mul` and `add` attributes.
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> import math
+    >>> def terrain(size=256, freq=3, phase=16):
+    ...     xfreq = 2 * math.pi * freq
+    ...     return [[math.sin(xfreq * (j/float(size)) + math.sin(i/float(phase))) for j in range(size)] for i in range(size)]
+    ...
+    >>> m1 = NewMatrix(256, 256, terrain(256, 1, 4)).normalize()
+    >>> m2 = NewMatrix(256, 256, terrain(256, 2, 8)).normalize()
+    >>> mm = NewMatrix(256, 256)
+    >>> inter = Sine(1, 0, .5, .5)
+    >>> morph = MatrixMorph(inter, mm, [m1,m2])
+    >>> x = Sine([99,100], 0, .45, .5)
+    >>> y = Sine([99,100], 0, .45, .5)
+    >>> a = MatrixPointer(mm, x, y, mul=.25).out()
+
+    """
+    def __init__(self, input, matrix, sources):
+        PyoObject.__init__(self)
+        self._input = input
+        self._matrix = matrix
+        self._sources = sources
+        self._in_fader = InputFader(input)
+        in_fader, matrix, lmax = convertArgsToLists(self._in_fader, matrix)
+        self._base_sources = [source[0] for source in sources]
+        self._base_objs = [MatrixMorph_base(wrap(in_fader,i), wrap(matrix,i), self._base_sources) for i in range(len(matrix))]
+
+    def __dir__(self):
+        return ['input', 'matrix', 'sources', 'mul', 'add']
+
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        return self
+
+    def setMul(self, x):
+        pass
+
+    def setAdd(self, x):
+        pass    
+
+    def setInput(self, x, fadetime=0.05):
+        """
+        Replace the `input` attribute.
+
+        Parameters:
+
+        x : PyoObject
+            New signal to process.
+        fadetime : float, optional
+            Crossfade time between old and new input. Defaults to 0.05.
+
+        """
+        self._input = x
+        self._in_fader.setInput(x, fadetime)
+
+    def setMatrix(self, x):
+        """
+        Replace the `matrix` attribute.
+
+        Parameters:
+
+        x : NewMatrix
+            new `matrix` attribute.
+
+        """
+        self._matrix = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setMatrix(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setSources(self, x):
+        """
+         Replace the `sources` attribute.
+
+        Parameters:
+
+        x : list of PyoMatrixObject
+            new `sources` attribute.
+
+        """
+        self._sources = x
+        self._base_sources = [source[0] for source in x]
+        [obj.setSources(self._base_sources) for i, obj in enumerate(self._base_objs)]
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = []
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    @property
+    def input(self):
+        """PyoObject. Morphing index between 0 and 1.""" 
+        return self._input
+    @input.setter
+    def input(self, x): self.setInput(x)
+
+    @property
+    def matrix(self):
+        """NewMatrix. The matrix where to write samples."""
+        return self._matrix
+    @matrix.setter
+    def matrix(self, x): self.setMatrix(x)
+
+    @property
+    def sources(self):
+        """list of PyoMatrixObject. List of matrices to interpolate from."""
+        return self._sources
+    @sources.setter
+    def sources(self, x): self.setSources(x)

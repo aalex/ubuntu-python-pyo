@@ -122,11 +122,11 @@ class Disto(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setSlope(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(0., 1., 'lin', 'drive', self._drive),
                           SLMap(0., 0.999, 'lin', 'slope', self._slope),
                           SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -163,7 +163,7 @@ class Delay(PyoObject):
         Delay time in seconds. Defaults to 0.25.
     feedback : float or PyoObject, optional
         Amount of output signal sent back into the delay line.
-         Defaults to 0.
+        Defaults to 0.
     maxdelay : float, optional
         Maximum delay length in seconds. Available only at initialization. 
         Defaults to 1.
@@ -185,8 +185,8 @@ class Delay(PyoObject):
     
     >>> s = Server().boot()
     >>> s.start()
-    >>> a = SfPlayer(SNDS_PATH + "/transparent.aif", loop=True)
-    >>> d = Delay(a, delay=.2, feedback=.7, mul=.5).out()
+    >>> a = SfPlayer(SNDS_PATH + "/transparent.aif", loop=True)()
+    >>> d = Delay(a, delay=.2, feedback=.7, mul=.5).out(1)
 
     """
     def __init__(self, input, delay=0.25, feedback=0, maxdelay=1, mul=1, add=0):
@@ -247,11 +247,11 @@ class Delay(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setFeedback(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(0.001, self._maxdelay, 'log', 'delay',  self._delay),
                           SLMap(0., 1., 'lin', 'feedback', self._feedback),
                           SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -273,6 +273,102 @@ class Delay(PyoObject):
         return self._feedback
     @feedback.setter
     def feedback(self, x): self.setFeedback(x)
+
+class SDelay(PyoObject):
+    """
+    Simple delay without interpolation.
+
+    Parent class : PyoObject
+
+    Parameters:
+
+    input : PyoObject
+        Input signal to be delayed.
+    delay : float or PyoObject, optional
+        Delay time in seconds. Defaults to 0.25.
+    maxdelay : float, optional
+        Maximum delay length in seconds. Available only at initialization. 
+        Defaults to 1.
+
+    Methods:
+
+    setInput(x, fadetime) : Replace the `input` attribute.
+    setDelay(x) : Replace the `delay` attribute.
+
+    Attributes:
+
+    input : PyoObject. Input signal to delayed.
+    delay : float or PyoObject. Delay time in seconds.
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> a = SfPlayer(SNDS_PATH + "/transparent.aif", loop=True).out()
+    >>> d = SDelay(a, delay=.25, mul=.5).out(1)
+
+    """
+    def __init__(self, input, delay=0.25, maxdelay=1, mul=1, add=0):
+        PyoObject.__init__(self)
+        self._input = input
+        self._delay = delay
+        self._maxdelay = maxdelay
+        self._mul = mul
+        self._add = add
+        self._in_fader = InputFader(input)
+        in_fader, delay, maxdelay, mul, add, lmax = convertArgsToLists(self._in_fader, delay, maxdelay, mul, add)
+        self._base_objs = [SDelay_base(wrap(in_fader,i), wrap(delay,i), wrap(maxdelay,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
+
+    def __dir__(self):
+        return ['input', 'delay', 'mul', 'add']
+
+    def setInput(self, x, fadetime=0.05):
+        """
+        Replace the `input` attribute.
+
+        Parameters:
+
+        x : PyoObject
+            New signal to process.
+        fadetime : float, optional
+            Crossfade time between old and new input. Defaults to 0.05.
+
+        """
+        self._input = x
+        self._in_fader.setInput(x, fadetime)
+
+    def setDelay(self, x):
+        """
+        Replace the `delay` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            New `delay` attribute.
+
+        """
+        self._delay = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setDelay(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = [SLMap(0.001, self._maxdelay, 'log', 'delay',  self._delay),
+                          SLMapMul(self._mul)]
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    @property
+    def input(self):
+        """PyoObject. Input signal to delayed.""" 
+        return self._input
+    @input.setter
+    def input(self, x): self.setInput(x)
+
+    @property
+    def delay(self):
+        """float or PyoObject. Delay time in seconds.""" 
+        return self._delay
+    @delay.setter
+    def delay(self, x): self.setDelay(x)
 
 class Waveguide(PyoObject):
     """
@@ -315,7 +411,7 @@ class Waveguide(PyoObject):
     >>> s.start()
     >>> t = LinTable([(0,0), (2,1), (5,0), (8191,0)])
     >>> met = Metro().play()
-    >>> pick = TrigEnv(met, table=t, 1)
+    >>> pick = TrigEnv(met, table=t, dur=1)
     >>> w = Waveguide(pick, freq=[200,400], dur=20, minfreq=20, mul=.5).out()
 
     """
@@ -376,11 +472,11 @@ class Waveguide(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setDur(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(10, 500., 'log', 'freq',  self._freq),
                           SLMapDur(self._dur),
                           SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -402,6 +498,166 @@ class Waveguide(PyoObject):
         return self._dur
     @dur.setter
     def dur(self, x): self.setDur(x)
+
+class AllpassWG(PyoObject):
+    """
+    Out of tune waveguide model with a recursive allpass network.
+
+    A waveguide model consisting of one delay-line with a 3-stages recursive
+    allpass filter which made the resonances of the waveguide out of tune.
+
+    Parent class : PyoObject
+
+    Parameters:
+
+    input : PyoObject
+        Input signal to delayed.
+    freq : float or PyoObject, optional
+        Frequency, in cycle per second, of the waveguide (i.e. the inverse 
+        of delay time). Defaults to 100.
+    feed : float or PyoObject, optional
+        Amount of output signal (between 0 and 1) sent back into the delay line.
+        Defaults to 0.95.
+    detune : float or PyoObject, optional
+        Control the depth of the allpass delay-line filter, i.e. the depth of 
+        the detuning. Should be in the range 0 to 1. Defaults to 0.5.
+    minfreq : float, optional
+        Minimum possible frequency, used to initialized delay length. 
+        Available only at initialization. Defaults to 20.
+
+    Methods:
+
+    setInput(x, fadetime) : Replace the `input` attribute.
+    setFreq(x) : Replace the `freq` attribute.
+    setFeed(x) : Replace the `feed` attribute.
+    setDetune(x) : Replace the `detune` attribute.
+
+    Attributes:
+
+    input : PyoObject. Input signal to delayed.
+    freq : float or PyoObject. Frequency in cycle per second.
+    feed : float or PyoObject. Amount of output signal sent back into the delay line.
+    detune : float or PyoObject. Depth of the detuning.
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> t = CurveTable([(0,0.0),(512,0.97),(1024,-0.94),(1536,0.0),(8192,0.0000)])
+    >>> rnd = Randi(min=.97, max=1.03, freq=[.143,.2,.165,.111])
+    >>> src = Osc(t, rnd*74.79, mul=.05)
+    >>> rnd2 = Randi(min=.5, max=1.0, freq=[.13,.22,.155,.171])
+    >>> det = Sig(0.75, mul=rnd2)
+    >>> rnd3 = Randi(min=.95, max=1.05, freq=[.145,.2002,.1055,.071])
+    >>> fx = AllpassWG(src, freq=rnd3*[74.87,75,75.07,75.21], feed=1, detune=det, mul=.25).out()
+
+    """
+    def __init__(self, input, freq=100, feed=0.95, detune=0.5, minfreq=20, mul=1, add=0):
+        PyoObject.__init__(self)
+        self._input = input
+        self._freq = freq
+        self._feed = feed
+        self._detune = detune
+        self._mul = mul
+        self._add = add
+        self._in_fader = InputFader(input)
+        in_fader, freq, feed, detune, minfreq, mul, add, lmax = convertArgsToLists(self._in_fader, freq, feed, detune, minfreq, mul, add)
+        self._base_objs = [AllpassWG_base(wrap(in_fader,i), wrap(freq,i), wrap(feed,i), wrap(detune,i), wrap(minfreq,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
+
+    def __dir__(self):
+        return ['input', 'freq', 'feed', 'detune', 'mul', 'add']
+
+    def setInput(self, x, fadetime=0.05):
+        """
+        Replace the `input` attribute.
+
+        Parameters:
+
+        x : PyoObject
+            New signal to process.
+        fadetime : float, optional
+            Crossfade time between old and new input. Defaults to 0.05.
+
+        """
+        self._input = x
+        self._in_fader.setInput(x, fadetime)
+
+    def setFreq(self, x):
+        """
+        Replace the `freq` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            New `freq` attribute.
+
+        """
+        self._freq = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setFreq(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setFeed(self, x):
+        """
+        Replace the `feed` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            New `feed` attribute.
+
+        """
+        self._feed = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setFeed(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setDetune(self, x):
+        """
+        Replace the `detune` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            New `detune` attribute.
+
+        """
+        self._detune = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setDetune(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = [SLMap(20., 500., 'log', 'freq',  self._freq),
+                          SLMap(0., 1., 'lin', 'feed', self._feed),
+                          SLMap(0., 1., 'lin', 'detune', self._detune),
+                          SLMapMul(self._mul)]
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    @property
+    def input(self):
+        """PyoObject. Input signal to delayed.""" 
+        return self._input
+    @input.setter
+    def input(self, x): self.setInput(x)
+
+    @property
+    def freq(self):
+        """float or PyoObject. Frequency in cycle per second.""" 
+        return self._freq
+    @freq.setter
+    def freq(self, x): self.setFreq(x)
+
+    @property
+    def feed(self):
+        """float or PyoObject. Amount of output signal sent back into the delay line.""" 
+        return self._feed
+    @feed.setter
+    def feed(self, x): self.setFeed(x)
+
+    @property
+    def detune(self):
+        """float or PyoObject. Depth of the detuning.""" 
+        return self._detune
+    @detune.setter
+    def detune(self, x): self.setDetune(x)
 
 class Freeverb(PyoObject):
     """
@@ -523,12 +779,12 @@ class Freeverb(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setMix(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(0., 1., 'lin', 'size',  self._size),
                           SLMap(0., 1., 'lin', 'damp',  self._damp),
                           SLMap(0., 1., 'lin', 'bal',  self._bal),
                           SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -600,7 +856,7 @@ class Convolve(PyoObject):
     >>> s.start()
     >>> snd = SNDS_PATH + '/transparent.aif'
     >>> sf = SfPlayer(snd, loop=True, mul=.5).out()
-    >>> a = Convolve(sf, '/Users/olipet/impulse3_512.aif').out()
+    >>> a = Convolve(sf, SndTable(SNDS_PATH+'/accord.aif'), size=512, mul=.3).out()
 
     """
     def __init__(self, input, table, size, mul=1, add=0):
@@ -612,8 +868,7 @@ class Convolve(PyoObject):
         self._add = add
         self._in_fader = InputFader(input)
         in_fader, table, size, mul, add, lmax = convertArgsToLists(self._in_fader, table, size, mul, add)                     
-        self._base_objs = [Convolve_base(wrap(in_fader,i), wrap(table,i), wrap(size,i), wrap(mul,i), wrap(add,i)) \
-                               for i in range(lmax)]
+        self._base_objs = [Convolve_base(wrap(in_fader,i), wrap(table,i), wrap(size,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
 
     def __dir__(self):
         return ['input', 'table', 'mul', 'add']
@@ -647,9 +902,9 @@ class Convolve(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setTable(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
       
     @property
     def input(self):
@@ -786,12 +1041,12 @@ class WGVerb(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setMix(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(0., 1., 'lin', 'feedback', self._feedback),
                           SLMap(500., 15000., 'log', 'cutoff', self._cutoff),
                           SLMap(0., 1., 'lin', 'mix', self._mix),
                           SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -935,12 +1190,12 @@ class Chorus(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setMix(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(0., 5., 'lin', 'depth', self._depth),
                           SLMap(0., 1., 'lin', 'feedback', self._feedback),
                           SLMap(0., 1., 'lin', 'mix', self._mix),
                           SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -987,7 +1242,7 @@ class Harmonizer(PyoObject):
          Defaults to 0.
     winsize : float, optional
         Window size in seconds (max = 1.0). 
-        Defaults to 0.05.
+        Defaults to 0.1.
 
     Methods:
 
@@ -1012,7 +1267,7 @@ class Harmonizer(PyoObject):
     >>> harm = Harmonizer(sf, 4).out(1)
 
     """
-    def __init__(self, input, transpo=-7.0, feedback=0, winsize=0.05, mul=1, add=0):
+    def __init__(self, input, transpo=-7.0, feedback=0, winsize=0.1, mul=1, add=0):
         PyoObject.__init__(self)
         self._input = input
         self._transpo = transpo
@@ -1084,11 +1339,11 @@ class Harmonizer(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setWinsize(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(-24.0, 24.0, 'lin', 'transpo',  self._transpo),
                           SLMap(0., 1., 'lin', 'feedback', self._feedback),
                           SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):

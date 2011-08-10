@@ -28,7 +28,10 @@ from _maps import *
 class Pattern(PyoObject):
     """
     Periodically calls a Python function.
-        
+
+    The play() method starts the pattern timer and is not called 
+    at the object creation time.
+            
     Parent class: PyoObject
     
     Parameters:
@@ -39,10 +42,12 @@ class Pattern(PyoObject):
         
     Methods:
 
+    setFunction(x) : Replace the `function` attribute.
     setTime(x) : Replace the `time` attribute.
 
     Attributes:
     
+    function : Python function. Function to be called.
     time : Time, in seconds, between each call.
     
     Notes:
@@ -72,7 +77,21 @@ class Pattern(PyoObject):
         self._base_objs = [Pattern_base(wrap(function,i), wrap(time,i)) for i in range(lmax)]
 
     def __dir__(self):
-        return ['time']
+        return ['function', 'time']
+
+    def setFunction(self, x):
+        """
+        Replace the `function` attribute.
+
+        Parameters:
+
+        x : Python function
+            new `function` attribute.
+
+        """
+        self._function = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setFunction(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
     def setTime(self, x):
         """
@@ -88,7 +107,7 @@ class Pattern(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setTime(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def out(self, x=0, inc=1):
+    def out(self, x=0, inc=1, dur=0, delay=0):
         return self
         
     def setMul(self, x):
@@ -103,10 +122,14 @@ class Pattern(PyoObject):
     def setDiv(self, x):
         pass
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(0.125, 4., 'lin', 'time', self._time)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
          
+    @property
+    def function(self): return self._function
+    @function.setter
+    def function(self, x): self.setFunction(x)   
     @property
     def time(self):
         """float or PyoObject. Time, in seconds, between each call.""" 
@@ -178,7 +201,7 @@ class Score(PyoObject):
     def __dir__(self):
         return ['input']
 
-    def out(self, chnl=0, inc=1):
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
         return self
 
     def setMul(self, x):
@@ -202,9 +225,9 @@ class Score(PyoObject):
         self._input = x
         self._in_fader.setInput(x, fadetime)
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self): return self._input
@@ -253,7 +276,7 @@ class CallAfter(PyoObject):
     def __dir__(self):
         return []
 
-    def out(self, x=0, inc=1):
+    def out(self, x=0, inc=1, dur=0, delay=0):
         return self
         
     def setMul(self, x):
@@ -268,6 +291,6 @@ class CallAfter(PyoObject):
     def setDiv(self, x):
         pass
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)

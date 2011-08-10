@@ -17,11 +17,23 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with pyo.  If not, see <http://www.gnu.org/licenses/>.
 """
-import os, inspect 
+import os, inspect, shutil
 from types import StringType, TupleType, ListType, DictType
 from pyo import *
  
-f = open(os.getcwd() + '/doc/manual.tex', 'w')
+# 'manuel-dev' for development, 'manual' for production  
+man_file = 'manual-dev'
+if man_file == 'manual-dev':
+    man_version = 'latest sources'
+else:
+    man_version = 'version %s' % PYO_VERSION
+
+try:
+    os.mkdir(os.getcwd() + '/doc')
+except OSError:
+    pass
+
+f = open(os.getcwd() + '/doc/%s.tex' % man_file, 'w')
 
 # Header
 f.write("\documentclass[12pt,oneside]{article}\n")
@@ -100,6 +112,7 @@ def getMethodsDoc(text, obj):
 def getFormattedDoc(text, obj):
     lines = text.splitlines(True)
     text = ''
+    title = ''
     skip_empty_line = False
     verbatim = False
     for line in lines:
@@ -113,6 +126,8 @@ def getFormattedDoc(text, obj):
                 else:
                     flag = True
                     skip_empty_line = True
+                    last_title = title
+                    title = key
                     break
         if flag:
             if verbatim:
@@ -120,6 +135,8 @@ def getFormattedDoc(text, obj):
                 verbatim = False
             text += '\n\\begin{Large}' + '{\\bf ' + line + '}\\end{Large}'
             text += '\n\\begin{verbatim}\n'
+            if title == 'Examples':
+                text += "from pyo import *\n"
             verbatim = True
         elif see_also:
             if verbatim:
@@ -137,7 +154,18 @@ def getFormattedDoc(text, obj):
             if skip_empty_line:
                 skip_empty_line = False
             else:     
+                if title == 'Examples':
+                    if line.strip() == '':
+                        text += 's.gui(locals())\n'
+                        skip_empty_line = True
+                    if ">>>" in line: 
+                        line.lstrip("    ")
+                        line = line.lstrip(">>> ")
+                    if "..." in line: 
+                        line.lstrip("    ")
+                        line = "    " +  line.lstrip("... ")
                 text += line
+                    
     if verbatim:            
         text += '\\end{verbatim}\n'
         verbatim = False
@@ -160,8 +188,9 @@ def getDocFirstLine(obj):
     else:
         f = text
     return f    
-                    
-f.write('\\begin{LARGE}pyo documentation\\end{LARGE}\n\n') 
+
+# Generates the LaTeX file                    
+f.write('\\begin{Huge}pyo documentation ( %s )\\end{Huge}\n\n' % man_version) 
 f.write('pyo is a Python module written in C to help digital signal processing script creation.\n\n')     
 f.write("""
 pyo is a Python module containing classes for a wide variety of audio signal processing types. With pyo, user will be
@@ -190,14 +219,49 @@ for key in sorted(OBJECTS_TREE.keys()):
 f.write('\end{document}\n')
 f.close()
 
+# LaTeX -> html
 os.chdir('doc/')
-os.system('latex2html -html_version 4.0,unicode -noinfo -long_titles 1 -noaddress -local_icons -image_type gif manual.tex')
-for file in os.listdir("manual"):
-    with open("manual/%s" % file, 'r') as f:
+os.system('latex2html %s.tex' % man_file)
+
+# Post-processing on html files
+for file in os.listdir(man_file):
+    with open("%s/%s" % (man_file, file), 'r') as f:
         text = f.read()
     text = text.replace("&lt;/A&gt;", "</A>")
-    with open("manual/%s" % file, 'w') as f:
+    if text.find('href="prettify.css"') == -1:
+            st = '<LINK REL="STYLESHEET" HREF="%s.css">' % man_file
+            stnew = """
+<LINK REL="STYLESHEET" HREF="%s.css">
+<link href="prettify.css" type="text/css" rel="stylesheet" />
+<script type="text/javascript" src="prettify.js"></script>
+
+""" % man_file
+            text = text.replace(st, stnew)
+
+            st = '<BODY'
+            stnew = '<BODY onload="prettyPrint()"'
+            text = text.replace(st, stnew)
+
+            ex_pos = text.find('<BIG CLASS="XLARGE"><B>Examples:')
+            if ex_pos != -1:
+                st = '<PRE>'
+                stnew = '<PRE class="prettyprint">'
+                text_first = text[:ex_pos]
+                text_second = text[ex_pos:]
+                text_second = text_second.replace(st, stnew, 1)
+                text = text_first + text_second
+
+    with open("%s/%s" % (man_file, file), 'w') as f:
         f.write(text)
-os.remove('manual.tex')
+        
+# Clean-up        
+os.remove('%s.tex' % man_file)
 os.chdir('../')
-os.system('scp -r doc/manual sysop@132.204.178.49:/Library/WebServer/Documents/pyo/')
+shutil.copy('scripts/prettify.css', 'doc/%s' % man_file)
+shutil.copy('scripts/prettify.js', 'doc/%s' % man_file)
+
+# Upload on iACT server
+print "Upload documentation (y/n)?"
+ans = raw_input()
+if (ans == 'y'):
+    os.system('scp -r doc/%s sysop@132.204.178.49:/Library/WebServer/Documents/pyo/' % man_file)

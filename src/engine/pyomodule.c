@@ -29,7 +29,7 @@
 #include "tablemodule.h"
 #include "matrixmodule.h"
 
-/* Portaudio stuff */
+/****** Portaudio utilities ******/
 static void portaudio_assert(PaError ecode, const char* cmdName) {
     if (ecode != paNoError) {
         const char* eText = Pa_GetErrorText(ecode);
@@ -41,203 +41,241 @@ static void portaudio_assert(PaError ecode, const char* cmdName) {
     }
 }
 
-static PyObject*
+static PyObject *
 portaudio_count_host_api(){
-    int numApis, err;
+    PaError err;
+    PaHostApiIndex numApis; 
 
     err = Pa_Initialize();
-    if (err < 0) {
-		Py_INCREF(Py_None);
-		return Py_None;
+    if (err != paNoError) {
+        portaudio_assert(err, "Pa_Initialize");
+		Py_RETURN_NONE;
 	}
-	
-    numApis = Pa_GetHostApiCount();
-    if( numApis < 0 ) {
-        printf( "ERROR: Pa_GetHostApiCount returned 0x%x\n", numApis );
+	else {
+        numApis = Pa_GetHostApiCount();
+        if( numApis < 0 )
+            portaudio_assert(numApis, "Pa_GetHostApiCount");
+        return PyInt_FromLong(numApis);
     }
-    
-    return PyInt_FromLong(numApis);
+}
+
+
+static PyObject*
+portaudio_list_host_apis(){
+    PaError err;
+    PaHostApiIndex n, i;
+	
+    err = Pa_Initialize();
+    if (err != paNoError) {
+        portaudio_assert(err, "Pa_Initialize");
+	}
+    else {
+        n = Pa_GetHostApiCount();
+        if (n < 0){
+            portaudio_assert(n, "Pa_GetHostApiCount");
+        }
+        else {
+            for (i=0; i < n; ++i){
+                const PaHostApiInfo *info = Pa_GetHostApiInfo(i);
+                assert(info);
+                
+                fprintf(stdout, "index: %i, id: %i, name: %s, num devices: %i, default in: %i, default out: %i\n", i, (int)info->type, info->name, (int)info->deviceCount, (int)info->defaultInputDevice, (int)info->defaultOutputDevice);
+            }
+        }        
+    }
+    Py_RETURN_NONE;
+}
+
+static PyObject*
+portaudio_get_default_host_api(){
+    PaError err;
+    PaHostApiIndex i;
+	
+    err = Pa_Initialize();
+    if (err != paNoError) {
+        portaudio_assert(err, "Pa_Initialize");
+		Py_RETURN_NONE;
+	}
+    else {
+        i = Pa_GetDefaultHostApi();
+        const PaHostApiInfo *info = Pa_GetHostApiInfo(i);
+        assert(info);
+        
+        fprintf(stdout, "index: %i, id: %i, name: %s, num devices: %i, default in: %i, default out: %i\n", i, (int)info->type, info->name, (int)info->deviceCount, (int)info->defaultInputDevice, (int)info->defaultOutputDevice);
+        
+        return PyInt_FromLong(i);
+    }
 }
 
 static PyObject*
 portaudio_count_devices(){
-    int numDevices;
-    int err;
+    PaError err;
+    PaDeviceIndex numDevices;
 	
 	err = Pa_Initialize();
-    if (err < 0) {
-		Py_INCREF(Py_None);
-		return Py_None;
+    if (err != paNoError) {
+        portaudio_assert(err, "Pa_Initialize");
+		Py_RETURN_NONE;
 	}
-	
-    numDevices = Pa_GetDeviceCount();
-    if( numDevices < 0 ) {
-        printf( "ERROR: Pa_CountDevices returned 0x%x\n", numDevices );
+	else {
+        numDevices = Pa_GetDeviceCount();
+        if( numDevices < 0 )
+            portaudio_assert(numDevices, "Pa_GetDeviceCount");
+        return PyInt_FromLong(numDevices);        
     }
-    
-    return PyInt_FromLong(numDevices);
+
 }
 
 static PyObject*
 portaudio_list_devices(){
-
-    int err, n, i;
+    PaError err;
+    PaDeviceIndex n, i;
 	
 	err = Pa_Initialize();
-    if (err < 0) {
-		Py_INCREF(Py_None);
-		return Py_None;
+    if (err != paNoError) {
+        portaudio_assert(err, "Pa_Initialize");
+		Py_RETURN_NONE;
 	}
-	
-    n = Pa_GetDeviceCount();
-    if (n < 0){
-        portaudio_assert(n, "Pa_GetDeviceCount");
-    }
-    
-    for (i=0; i < n; ++i){
-        const PaDeviceInfo *info=Pa_GetDeviceInfo(i);
-        assert(info);
-        
-        if (info->maxInputChannels > 0){
-            fprintf(stdout, "%i: IN %s, host api index: %i, default: %i Hz, %f s latency\n", i, info->name, (int)info->hostApi, (int)info->defaultSampleRate, (float)info->defaultLowInputLatency);
+    else {
+        n = Pa_GetDeviceCount();
+        if (n < 0){
+            portaudio_assert(n, "Pa_GetDeviceCount");
         }
-        if (info->maxOutputChannels > 0){
-            fprintf(stdout, "%i: OUT %s, host api index: %i default: %i Hz, %f s latency\n", i, info->name, (int)info->hostApi, (int)info->defaultSampleRate, (float)info->defaultLowOutputLatency);
-        }
+        else {
+            for (i=0; i < n; ++i){
+                const PaDeviceInfo *info = Pa_GetDeviceInfo(i);
+                assert(info);
+                
+                if (info->maxInputChannels > 0)
+                    fprintf(stdout, "%i: IN, name: %s, host api index: %i, default sr: %i Hz, latency: %f s\n", i, info->name, (int)info->hostApi, (int)info->defaultSampleRate, (float)info->defaultLowInputLatency);
+                
+                if (info->maxOutputChannels > 0)
+                    fprintf(stdout, "%i: OUT, name: %s, host api index: %i, default sr: %i Hz, latency: %f s\n", i, info->name, (int)info->hostApi, (int)info->defaultSampleRate, (float)info->defaultLowOutputLatency);
+            }
+        }        
     }
-    
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static PyObject*
 portaudio_get_output_devices(){
-    
-	int err, n, i;
+    PaError err;
+    PaDeviceIndex n, i;
 
     PyObject *list, *list_index;
     list = PyList_New(0);
     list_index = PyList_New(0);
     	
 	err = Pa_Initialize();
-    if (err < 0) {
-		Py_INCREF(Py_None);
-		return Py_None;
+    if (err != paNoError) {
+        portaudio_assert(err, "Pa_Initialize");
+		Py_RETURN_NONE;
 	}
-    
-    n = Pa_GetDeviceCount();
-    if (n < 0){
-        portaudio_assert(n, "Pa_GetDeviceCount");
-    }
-    
-    for (i=0; i < n; ++i){
-        const PaDeviceInfo *info=Pa_GetDeviceInfo(i);
-        assert(info);
-
-        if (info->maxOutputChannels > 0){
-            fprintf(stdout, "%i: OUT %s, host api index: %i default: %i Hz, %f s latency\n", i, info->name, (int)info->hostApi, (int)info->defaultSampleRate, (float)info->defaultLowOutputLatency);
-            PyList_Append(list, PyString_FromString(info->name));
-            PyList_Append(list_index, PyInt_FromLong(i));
+    else {
+        n = Pa_GetDeviceCount();
+        if (n < 0){
+            portaudio_assert(n, "Pa_GetDeviceCount");
+            Py_RETURN_NONE;
         }
+        else {
+            for (i=0; i < n; ++i){
+                const PaDeviceInfo *info=Pa_GetDeviceInfo(i);
+                assert(info);
+                
+                if (info->maxOutputChannels > 0){
+                    fprintf(stdout, "%i: OUT, name: %s, host api index: %i, default sr: %i Hz, latency: %f s\n", i, info->name, (int)info->hostApi, (int)info->defaultSampleRate, (float)info->defaultLowOutputLatency);
+                    PyList_Append(list, PyString_FromString(info->name));
+                    PyList_Append(list_index, PyInt_FromLong(i));
+                }
+            }
+            return Py_BuildValue("OO", list, list_index);
+        }        
     }
-    
-    return Py_BuildValue("OO", list, list_index);
 }
 
 static PyObject*
-portaudio_list_host_apis(){
-
-    int err, n, i;
-	
-	err = Pa_Initialize();
-    if (err < 0) {
-		Py_INCREF(Py_None);
-		return Py_None;
-	}
-	
-    n = Pa_GetHostApiCount();
-    if (n < 0){
-        portaudio_assert(n, "Pa_GetHostApiCount");
-    }
+portaudio_get_input_devices(){
+    PaError err;
+    PaDeviceIndex n, i;
     
-    if (n > 0) {
-        for (i=0; i < n; ++i){
-            const PaHostApiInfo *info=Pa_GetHostApiInfo(i);
-            assert(info);
-        
-            fprintf(stdout, "index: %i, id: %i, %s, num devices: %i, default in: %i, default out: %i\n", i, (int)info->type, info->name, (int)info->deviceCount, (int)info->defaultInputDevice, (int)info->defaultOutputDevice);
+    PyObject *list, *list_index;
+    list = PyList_New(0);
+    list_index = PyList_New(0);
+    
+	err = Pa_Initialize();
+    if (err != paNoError) {
+        portaudio_assert(err, "Pa_Initialize");
+		Py_RETURN_NONE;
+	}
+    else {
+        n = Pa_GetDeviceCount();
+        if (n < 0){
+            portaudio_assert(n, "Pa_GetDeviceCount");
+            Py_RETURN_NONE;
         }
+        else {
+            for (i=0; i < n; ++i){
+                const PaDeviceInfo *info=Pa_GetDeviceInfo(i);
+                assert(info);
+                
+                if (info->maxInputChannels > 0){
+                    fprintf(stdout, "%i: IN, name: %s, host api index: %i, default sr: %i Hz, latency: %f s\n", i, info->name, (int)info->hostApi, (int)info->defaultSampleRate, (float)info->defaultLowInputLatency);
+                    PyList_Append(list, PyString_FromString(info->name));
+                    PyList_Append(list_index, PyInt_FromLong(i));
+                }
+            }
+            return Py_BuildValue("OO", list, list_index);            
+        }        
     }
-    
-    Py_INCREF(Py_None);
-    return Py_None;
 }
-
-static PyObject*
-portaudio_get_default_host_api(){
-    
-    int err, i;
-	
-	err = Pa_Initialize();
-    if (err < 0) {
-		Py_INCREF(Py_None);
-		return Py_None;
-	}
-	
-    i = Pa_GetDefaultHostApi();
-    const PaHostApiInfo *info=Pa_GetHostApiInfo(i);
-    assert(info);
-    
-    fprintf(stdout, "index: %i, id: %i, %s, num devices: %i, default in: %i, default out: %i\n", i, (int)info->type, info->name, (int)info->deviceCount, (int)info->defaultInputDevice, (int)info->defaultOutputDevice);
-    
-    return PyInt_FromLong(i);
-}
-
 
 static PyObject*
 portaudio_get_default_input(){
-    
-    int err, i;
+    PaError err;
+    PaDeviceIndex i;
 	
 	err = Pa_Initialize();
-    if (err < 0) {
-		Py_INCREF(Py_None);
-		return Py_None;
+    if (err != paNoError) {
+        portaudio_assert(err, "Pa_Initialize");
+		Py_RETURN_NONE;
 	}
-	
-    i = Pa_GetDefaultInputDevice();
-    const PaDeviceInfo *info=Pa_GetDeviceInfo(i);
-    assert(info);
+    else {
+        i = Pa_GetDefaultInputDevice();
+        const PaDeviceInfo *info = Pa_GetDeviceInfo(i);
+        assert(info);
         
-    if (info->maxInputChannels > 0){
-        fprintf(stdout, "%i: IN %s default: %i Hz, %f s latency\n", i, info->name, (int)info->defaultSampleRate, (float)info->defaultLowInputLatency);
+        if (info->maxInputChannels > 0)
+            fprintf(stdout, "%i: IN, name: %s, default sr: %i Hz, latency: %f s\n", i, info->name, (int)info->defaultSampleRate, (float)info->defaultLowInputLatency);
+
+        return PyInt_FromLong(i);        
     }
-    
-    return PyInt_FromLong(i);
+
 }
 
 static PyObject*
 portaudio_get_default_output(){
-    
-    int err, i;
+    PaError err;
+    PaDeviceIndex i;
 	
 	err = Pa_Initialize();
-	if (err < 0) {
-		Py_INCREF(Py_None);
-		return Py_None;
+    if (err != paNoError) {
+        portaudio_assert(err, "Pa_Initialize");
+		Py_RETURN_NONE;
 	}
-	
-    i = Pa_GetDefaultOutputDevice();
-    const PaDeviceInfo *info=Pa_GetDeviceInfo(i);
-    assert(info);
-    
-    if (info->maxOutputChannels > 0){
-        fprintf(stdout, "%i: IN %s default: %i Hz, %f s latency\n", i, info->name, (int)info->defaultSampleRate, (float)info->defaultLowInputLatency);
+    else {
+        i = Pa_GetDefaultOutputDevice();
+        const PaDeviceInfo *info = Pa_GetDeviceInfo(i);
+        assert(info);
+        
+        if (info->maxOutputChannels > 0)
+            fprintf(stdout, "%i: OUT, name: %s, default sr: %i Hz, latency: %f s\n", i, info->name, (int)info->defaultSampleRate, (float)info->defaultLowInputLatency);
+        
+        return PyInt_FromLong(i);
+        
     }
-
-    return PyInt_FromLong(i);
 }
 
+/****** Portmidi utilities ******/
 static PyObject *
 portmidi_count_devices(){
     int numDevices;
@@ -248,25 +286,73 @@ portmidi_count_devices(){
 static PyObject *
 portmidi_list_devices(){
     int i;
-    /* list device information */
     printf("MIDI input devices:\n");
     for (i = 0; i < Pm_CountDevices(); i++) {
         const PmDeviceInfo *info = Pm_GetDeviceInfo(i);
-        if (info->input) printf("%d: %s, %s\n", i, info->interf, info->name);
+        if (info->input) 
+            printf("%d: %s, %s\n", i, info->interf, info->name);
     }
     Py_INCREF(Py_None);
     return Py_None;
 }
 
-/* Libsndfile stuff */
+static PyObject*
+portmidi_get_input_devices(){
+	int n, i;
+    
+    PyObject *list, *list_index;
+    list = PyList_New(0);
+    list_index = PyList_New(0);
+
+    n = Pm_CountDevices();
+    if (n < 0){
+        printf("Portmidi warning: No Midi interface found\n");
+    }
+    else {
+        for (i=0; i < n; i++){
+            const PmDeviceInfo *info = Pm_GetDeviceInfo(i);
+        
+            if (info->input){
+                printf("%d: %s, %s\n", i, info->interf, info->name);
+                PyList_Append(list, PyString_FromString(info->name));
+                PyList_Append(list_index, PyInt_FromLong(i));
+            }
+        }
+    }
+    return Py_BuildValue("OO", list, list_index);
+}
+
 static PyObject *
-sndinfo(PyObject *self, PyObject *args) {
+portmidi_get_default_input(){
+    PmDeviceID i;
+    
+    i = Pm_GetDefaultInputDeviceID();
+    const PmDeviceInfo *info = Pm_GetDeviceInfo(i);
+    if (info->input) 
+        printf("%d: %s, %s\n", i, info->interf, info->name);
+
+    return PyInt_FromLong(i);
+}
+
+/****** Libsndfile utilities ******/
+#define sndinfo_info \
+"\nRetrieve informations about a soundfile.\n\n\
+Prints the infos of the given soundfile to the console and returns a tuple containing (number of frames, duration in seconds, sampling rate, number of channels).\n\nsndinfo(path, print=False)\n\nParameters:\n\n    \
+path : string\n        Path of a valid soundfile.\n    \
+print : boolean, optional\n        If True, sndinfo will print sound infos to the console. Defaults to False.\n\n"
+
+
+static PyObject *
+sndinfo(PyObject *self, PyObject *args, PyObject *kwds) {
     
     SNDFILE *sf;
     SF_INFO info;
     char *path;
+    int print = 0;
 
-    if (! PyArg_ParseTuple(args, "s", &path))
+    static char *kwlist[] = {"path", "print", NULL};
+
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "s|i", kwlist, &path, &print))
         return NULL;
 
     /* Open the sound file. */
@@ -275,77 +361,82 @@ sndinfo(PyObject *self, PyObject *args) {
     if (sf == NULL)
     {
         printf("Failed to open the file.\n");
+        Py_RETURN_NONE;
     }
-
-    PyObject *sndinfo = PyTuple_Pack(4, PyInt_FromLong(info.frames), PyFloat_FromDouble((float)info.frames / info.samplerate), PyFloat_FromDouble(info.samplerate), PyInt_FromLong(info.channels));
-    sf_close(sf);
-    return sndinfo;
+    else {
+        if (print)
+            fprintf(stdout, "name: %s\nnumber of frames: %i\nduration: %.4f sec\nsr: %.2f\nchannels: %i\n", path, (int)info.frames, ((float)info.frames / info.samplerate), (float)info.samplerate, (int)info.channels);
+        PyObject *sndinfo = PyTuple_Pack(4, PyInt_FromLong(info.frames), PyFloat_FromDouble((float)info.frames / info.samplerate), PyFloat_FromDouble(info.samplerate), PyInt_FromLong(info.channels));
+        sf_close(sf);
+        return sndinfo;
+        
+    }
 }    
 
 #define savefile_info \
-"\nCreates an audio file from a list of floats.\n\nsavefile(samples, path, sr=44100, channels=1, format=0)\n\nParameters:\n\n    \
+"\nCreates an audio file from a list of floats.\n\nsavefile(samples, path, sr=44100, channels=1, fileformat=0, sampletype=0)\n\nParameters:\n\n    \
 samples : list of floats\n        list of samples data, or list of list of samples data if more than 1 channels.\n    \
 path : string\n        Full path (including extension) of the new file.\n    \
 sr : int, optional\n        Sampling rate of the new file. Defaults to 44100.\n    \
 channels : int, optional\n        number of channels of the new file. Defaults to 1.\n    \
-format : int, optional\n        Format type of the new file. Possible formats are:\n    \
-        0 : AIFF 32 bits float (Default)\n    \
-        1 : WAV 32 bits float\n    \
-        2 : AIFF 16 bit int\n    \
-        3 : WAV 16 bits int\n    \
-        4 : AIFF 24 bits int\n    \
-        5 : WAV 24 bits int\n    \
-        6 : AIFF 32 bits int\n    \
-        7 : WAV 32 bits int\n\n"
+fileformat : int, optional\n        Format type of the new file. Defaults to 0. Supported formats are:\n    \
+        0 : WAVE - Microsoft WAV format (little endian) {.wav, .wave}\n    \
+        1 : AIFF - Apple/SGI AIFF format (big endian) {.aif, .aiff}\n    \
+sampletype ; int, optional\n        Bit depth encoding of the audio file. Defaults to 0. Supported types are:\n    \
+        0 : 16 bit int\n    \
+        1 : 24 bits int\n    \
+        2 : 32 bits int\n    \
+        3 : 32 bits float\n    \
+        4 : 64 bits float\n\n"
 
 static PyObject *
 savefile(PyObject *self, PyObject *args, PyObject *kwds) {
     int i, j, size;
     char *recpath;
     PyObject *samples;
-    float *sampsarray;
+    MYFLT *sampsarray;
     int sr = 44100;
     int channels = 1;
-    int format = 0;
+    int fileformat = 0;
+    int sampletype = 0;
     SNDFILE *recfile;
     SF_INFO recinfo;
-    static char *kwlist[] = {"samples", "path", "sr", "channels", "format", NULL};
+    static char *kwlist[] = {"samples", "path", "sr", "channels", "fileformat", "sampletype", NULL};
 
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "Os|iii", kwlist, &samples, &recpath, &sr, &channels, &format))
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "Os|iiii", kwlist, &samples, &recpath, &sr, &channels, &fileformat, &sampletype))
         return PyInt_FromLong(-1);
     
     recinfo.samplerate = sr;
     recinfo.channels = channels;
-    switch (format) {
+    switch (fileformat) {
         case 0:
-            recinfo.format = SF_FORMAT_AIFF | SF_FORMAT_FLOAT;
+            recinfo.format = SF_FORMAT_WAV;
             break;
-        case 1:    
-            recinfo.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
+        case 1:
+            recinfo.format = SF_FORMAT_AIFF;
+            break;
+    }
+    switch (sampletype) {
+        case 0:
+            recinfo.format = recinfo.format | SF_FORMAT_PCM_16;
+            break;
+        case 1:
+            recinfo.format = recinfo.format | SF_FORMAT_PCM_24;
             break;
         case 2:
-            recinfo.format = SF_FORMAT_AIFF | SF_FORMAT_PCM_16;
+            recinfo.format = recinfo.format | SF_FORMAT_PCM_32;
             break;
-        case 3:    
-            recinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
+        case 3:
+            recinfo.format = recinfo.format | SF_FORMAT_FLOAT;
             break;
         case 4:
-            recinfo.format = SF_FORMAT_AIFF | SF_FORMAT_PCM_24;
-            break;
-        case 5:    
-            recinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_24;
-            break;
-        case 6:
-            recinfo.format = SF_FORMAT_AIFF | SF_FORMAT_PCM_32;
-            break;
-        case 7:    
-            recinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_32;
+            recinfo.format = recinfo.format | SF_FORMAT_DOUBLE;
             break;
     }
     
     if (channels == 1) {
         size = PyList_Size(samples);
-        sampsarray = (float *)malloc(size * sizeof(float));
+        sampsarray = (MYFLT *)malloc(size * sizeof(MYFLT));
         for (i=0; i<size; i++) {
             sampsarray[i] = PyFloat_AS_DOUBLE(PyList_GET_ITEM(samples, i));
         }
@@ -356,7 +447,7 @@ savefile(PyObject *self, PyObject *args, PyObject *kwds) {
             return PyInt_FromLong(-1);
         }
         size = PyList_Size(PyList_GET_ITEM(samples, 0)) * channels;
-        sampsarray = (float *)malloc(size * sizeof(float));
+        sampsarray = (MYFLT *)malloc(size * sizeof(MYFLT));
         for (i=0; i<(size/channels); i++) {
             for (j=0; j<channels; j++) {
                 sampsarray[i*channels+j] = PyFloat_AS_DOUBLE(PyList_GET_ITEM(PyList_GET_ITEM(samples, j), i));
@@ -366,57 +457,71 @@ savefile(PyObject *self, PyObject *args, PyObject *kwds) {
     if (! (recfile = sf_open(recpath, SFM_WRITE, &recinfo))) {
         printf ("Not able to open output file %s.\n", recpath) ;
     }
-    sf_write_float(recfile, sampsarray, size);
+    SF_WRITE(recfile, sampsarray, size);
     sf_close(recfile);
     free(sampsarray);
     
     Py_RETURN_NONE;    
 }
 
+/****** Conversion utilities ******/
 static PyObject *
 midiToHz(PyObject *self, PyObject *arg) {
-    return Py_BuildValue("f", 8.1757989156437 * powf(1.0594630943593, PyFloat_AsDouble(PyNumber_Float(arg))));
+    return Py_BuildValue("d", 8.1757989156437 * pow(1.0594630943593, PyFloat_AsDouble(PyNumber_Float(arg))));
+}    
+
+static PyObject *
+midiToTranspo(PyObject *self, PyObject *arg) {
+    return Py_BuildValue("d", pow(1.0594630943593, PyFloat_AsDouble(PyNumber_Float(arg))-60.0));
 }    
 
 static PyObject *
 sampsToSec(PyObject *self, PyObject *arg) {
     PyObject *server = PyServer_get_server();
-    float sr = PyFloat_AsDouble(PyObject_CallMethod(server, "getSamplingRate", NULL));
-    return Py_BuildValue("f", PyFloat_AsDouble(PyNumber_Float(arg)) / sr);
+    double sr = PyFloat_AsDouble(PyObject_CallMethod(server, "getSamplingRate", NULL));
+    return Py_BuildValue("d", PyFloat_AsDouble(PyNumber_Float(arg)) / sr);
 }                         
 
 static PyObject *
 secToSamps(PyObject *self, PyObject *arg) {
     PyObject *server = PyServer_get_server();
-    float sr = PyFloat_AsDouble(PyObject_CallMethod(server, "getSamplingRate", NULL));
+    double sr = PyFloat_AsDouble(PyObject_CallMethod(server, "getSamplingRate", NULL));
     return Py_BuildValue("i", (int)(PyFloat_AsDouble(PyNumber_Float(arg)) * sr));
 }                         
 
 static PyMethodDef pyo_functions[] = {
-{"pa_count_devices", (PyCFunction)portaudio_count_devices, METH_NOARGS, "Returns the number of devices founded by Portaudio."},
-{"pa_count_host_apis", (PyCFunction)portaudio_count_host_api, METH_NOARGS, "Returns the number of host apis founded by Portaudio."},
-{"pa_list_devices", (PyCFunction)portaudio_list_devices, METH_NOARGS, "Lists all devices founded by Portaudio."},
-{"pa_get_output_devices", (PyCFunction)portaudio_get_output_devices, METH_NOARGS, "Returns output devices (device names, device indexes) founded by Portaudio."},
-{"pa_list_host_apis", (PyCFunction)portaudio_list_host_apis, METH_NOARGS, "Lists all host apis found by Portaudio."},
+{"pa_count_devices", (PyCFunction)portaudio_count_devices, METH_NOARGS, "Returns the number of devices found by Portaudio."},
+{"pa_count_host_apis", (PyCFunction)portaudio_count_host_api, METH_NOARGS, "Returns the number of host apis found by Portaudio."},
+{"pa_list_devices", (PyCFunction)portaudio_list_devices, METH_NOARGS, "Prints a list of all devices found by Portaudio."},
+{"pa_get_output_devices", (PyCFunction)portaudio_get_output_devices, METH_NOARGS, "Returns output devices (device names, device indexes) found by Portaudio.\n\n`device names` is a list of strings and `device indexes` is a list of the actual Portaudio index of each device."},
+{"pa_get_input_devices", (PyCFunction)portaudio_get_input_devices, METH_NOARGS, "Returns input devices (device names, device indexes) found by Portaudio.\n\n`device names` is a list of strings and `device indexes` is a list of the actual Portaudio index of each device."},
+{"pa_list_host_apis", (PyCFunction)portaudio_list_host_apis, METH_NOARGS, "Prints a list of all host apis found by Portaudio."},
 {"pa_get_default_input", (PyCFunction)portaudio_get_default_input, METH_NOARGS, "Returns Portaudio default input device."},
 {"pa_get_default_host_api", (PyCFunction)portaudio_get_default_host_api, METH_NOARGS, "Returns Portaudio default host_api."},
 {"pa_get_default_output", (PyCFunction)portaudio_get_default_output, METH_NOARGS, "Returns Portaudio default output device."},
 {"pm_count_devices", (PyCFunction)portmidi_count_devices, METH_NOARGS, "Returns the number of devices found by Portmidi."},
-{"pm_list_devices", (PyCFunction)portmidi_list_devices, METH_NOARGS, "Lists all devices found by Portmidi."},
-{"midiToHz", (PyCFunction)midiToHz, METH_O, "Returns Hertz value for a midi input."},
-{"sampsToSec", (PyCFunction)sampsToSec, METH_O, "Converts and returns a number of samples in seconds."},
-{"secToSamps", (PyCFunction)secToSamps, METH_O, "Converts and returns a seconds value in number of samples."},
-{"sndinfo", (PyCFunction)sndinfo, METH_VARARGS, "Returns number of frames, duration in seconds, sampling rate and number of channels of the given sound file."},
+{"pm_list_devices", (PyCFunction)portmidi_list_devices, METH_NOARGS, "Prints a list of all devices found by Portmidi."},
+{"pm_get_input_devices", (PyCFunction)portmidi_get_input_devices, METH_NOARGS, "Returns Midi input devices (device names, device indexes) found by Portmidi.\n\n`device names` is a list of strings and `device indexes` is a list of the actual Portmidi index of each device."},
+{"pm_get_default_input", (PyCFunction)portmidi_get_default_input, METH_NOARGS, "Returns Portmidi default input device."},
+{"sndinfo", (PyCFunction)sndinfo, METH_VARARGS|METH_KEYWORDS, sndinfo_info},
 {"savefile", (PyCFunction)savefile, METH_VARARGS|METH_KEYWORDS, savefile_info},
+{"midiToHz", (PyCFunction)midiToHz, METH_O, "Returns the frequency in Hertz equivalent to the given midi note."},
+{"midiToTranspo", (PyCFunction)midiToTranspo, METH_O, "Returns the transposition factor equivalent to the given midi note (central key = 60)."},
+{"sampsToSec", (PyCFunction)sampsToSec, METH_O, "Returns the number of samples equivalent of the given duration in seconds."},
+{"secToSamps", (PyCFunction)secToSamps, METH_O, "Returns the duration in seconds equivalent to the given number of samples."},
 {NULL, NULL, 0, NULL},
 };
 
 PyMODINIT_FUNC
+#ifndef USE_DOUBLE
 init_pyo(void)
+#else
+init_pyo64(void)
+#endif
 {
     PyObject *m;
     
-    m = Py_InitModule3("_pyo", pyo_functions, "Python digital signal processing module.");
+    m = Py_InitModule3(LIB_BASE_NAME, pyo_functions, "Python digital signal processing module.");
 
     if (PyType_Ready(&ServerType) < 0)
         return;
@@ -503,6 +608,11 @@ init_pyo(void)
     Py_INCREF(&HannTableType);
     PyModule_AddObject(m, "HannTable_base", (PyObject *)&HannTableType);
 
+    if (PyType_Ready(&ParaTableType) < 0)
+        return;
+    Py_INCREF(&ParaTableType);
+    PyModule_AddObject(m, "ParaTable_base", (PyObject *)&ParaTableType);
+    
     if (PyType_Ready(&LinTableType) < 0)
         return;
     Py_INCREF(&LinTableType);
@@ -528,6 +638,11 @@ init_pyo(void)
     Py_INCREF(&SndTableType);
     PyModule_AddObject(m, "SndTable_base", (PyObject *)&SndTableType);
 
+    if (PyType_Ready(&DataTableType) < 0)
+        return;
+    Py_INCREF(&DataTableType);
+    PyModule_AddObject(m, "DataTable_base", (PyObject *)&DataTableType);
+    
     if (PyType_Ready(&NewTableType) < 0)
         return;
     Py_INCREF(&NewTableType);
@@ -573,6 +688,11 @@ init_pyo(void)
         return;
     Py_INCREF(&MatrixRecTrigType);
     PyModule_AddObject(m, "MatrixRecTrig_base", (PyObject *)&MatrixRecTrigType);
+
+    if (PyType_Ready(&MatrixMorphType) < 0)
+        return;
+    Py_INCREF(&MatrixMorphType);
+    PyModule_AddObject(m, "MatrixMorph_base", (PyObject *)&MatrixMorphType);
     
     if (PyType_Ready(&InputType) < 0)
         return;
@@ -589,6 +709,16 @@ init_pyo(void)
     Py_INCREF(&MetroType);
     PyModule_AddObject(m, "Metro_base", (PyObject *)&MetroType);
 
+    if (PyType_Ready(&SeqerType) < 0)
+        return;
+    Py_INCREF(&SeqerType);
+    PyModule_AddObject(m, "Seqer_base", (PyObject *)&SeqerType);
+
+    if (PyType_Ready(&SeqType) < 0)
+        return;
+    Py_INCREF(&SeqType);
+    PyModule_AddObject(m, "Seq_base", (PyObject *)&SeqType);
+    
     if (PyType_Ready(&ClouderType) < 0)
         return;
     Py_INCREF(&ClouderType);
@@ -609,6 +739,11 @@ init_pyo(void)
     Py_INCREF(&BeatType);
     PyModule_AddObject(m, "Beat_base", (PyObject *)&BeatType);
 
+    if (PyType_Ready(&BeatTapStreamType) < 0)
+        return;
+    Py_INCREF(&BeatTapStreamType);
+    PyModule_AddObject(m, "BeatTapStream_base", (PyObject *)&BeatTapStreamType);
+    
     if (PyType_Ready(&BeatAmpStreamType) < 0)
         return;
     Py_INCREF(&BeatAmpStreamType);
@@ -703,6 +838,11 @@ init_pyo(void)
         return;
     Py_INCREF(&OscLoopType);
     PyModule_AddObject(m, "OscLoop_base", (PyObject *)&OscLoopType);
+
+    if (PyType_Ready(&OscBankType) < 0)
+        return;
+    Py_INCREF(&OscBankType);
+    PyModule_AddObject(m, "OscBank_base", (PyObject *)&OscBankType);
     
     if (PyType_Ready(&TableReadType) < 0)
         return;
@@ -733,6 +873,41 @@ init_pyo(void)
         return;
     Py_INCREF(&FmType);
     PyModule_AddObject(m, "Fm_base", (PyObject *)&FmType);
+
+    if (PyType_Ready(&CrossFmType) < 0)
+        return;
+    Py_INCREF(&CrossFmType);
+    PyModule_AddObject(m, "CrossFm_base", (PyObject *)&CrossFmType);
+
+    if (PyType_Ready(&LFOType) < 0)
+        return;
+    Py_INCREF(&LFOType);
+    PyModule_AddObject(m, "LFO_base", (PyObject *)&LFOType);
+    
+    if (PyType_Ready(&BlitType) < 0)
+        return;
+    Py_INCREF(&BlitType);
+    PyModule_AddObject(m, "Blit_base", (PyObject *)&BlitType);
+
+    if (PyType_Ready(&RosslerType) < 0)
+        return;
+    Py_INCREF(&RosslerType);
+    PyModule_AddObject(m, "Rossler_base", (PyObject *)&RosslerType);
+    
+    if (PyType_Ready(&RosslerAltType) < 0)
+        return;
+    Py_INCREF(&RosslerAltType);
+    PyModule_AddObject(m, "RosslerAlt_base", (PyObject *)&RosslerAltType);
+
+    if (PyType_Ready(&LorenzType) < 0)
+        return;
+    Py_INCREF(&LorenzType);
+    PyModule_AddObject(m, "Lorenz_base", (PyObject *)&LorenzType);
+
+    if (PyType_Ready(&LorenzAltType) < 0)
+        return;
+    Py_INCREF(&LorenzAltType);
+    PyModule_AddObject(m, "LorenzAlt_base", (PyObject *)&LorenzAltType);
     
     if (PyType_Ready(&PhasorType) < 0)
         return;
@@ -744,6 +919,11 @@ init_pyo(void)
     Py_INCREF(&PointerType);
     PyModule_AddObject(m, "Pointer_base", (PyObject *)&PointerType);
 
+    if (PyType_Ready(&TableIndexType) < 0)
+        return;
+    Py_INCREF(&TableIndexType);
+    PyModule_AddObject(m, "TableIndex_base", (PyObject *)&TableIndexType);
+    
     if (PyType_Ready(&LookupType) < 0)
         return;
     Py_INCREF(&LookupType);
@@ -753,6 +933,16 @@ init_pyo(void)
         return;
     Py_INCREF(&NoiseType);
     PyModule_AddObject(m, "Noise_base", (PyObject *)&NoiseType);
+
+    if (PyType_Ready(&PinkNoiseType) < 0)
+        return;
+    Py_INCREF(&PinkNoiseType);
+    PyModule_AddObject(m, "PinkNoise_base", (PyObject *)&PinkNoiseType);
+
+    if (PyType_Ready(&BrownNoiseType) < 0)
+        return;
+    Py_INCREF(&BrownNoiseType);
+    PyModule_AddObject(m, "BrownNoise_base", (PyObject *)&BrownNoiseType);
     
     if (PyType_Ready(&BiquadType) < 0)
         return;
@@ -799,6 +989,11 @@ init_pyo(void)
     Py_INCREF(&PortType);
     PyModule_AddObject(m, "Port_base", (PyObject *)&PortType);
     
+    if (PyType_Ready(&DenormType) < 0)
+        return;
+    Py_INCREF(&DenormType);
+    PyModule_AddObject(m, "Denorm_base", (PyObject *)&DenormType);
+    
     if (PyType_Ready(&DistoType) < 0)
         return;
     Py_INCREF(&DistoType);
@@ -809,6 +1004,21 @@ init_pyo(void)
     Py_INCREF(&ClipType);
     PyModule_AddObject(m, "Clip_base", (PyObject *)&ClipType);
 
+    if (PyType_Ready(&MirrorType) < 0)
+        return;
+    Py_INCREF(&MirrorType);
+    PyModule_AddObject(m, "Mirror_base", (PyObject *)&MirrorType);
+
+    if (PyType_Ready(&WrapType) < 0)
+        return;
+    Py_INCREF(&WrapType);
+    PyModule_AddObject(m, "Wrap_base", (PyObject *)&WrapType);
+    
+    if (PyType_Ready(&BetweenType) < 0)
+        return;
+    Py_INCREF(&BetweenType);
+    PyModule_AddObject(m, "Between_base", (PyObject *)&BetweenType);
+    
     if (PyType_Ready(&DegradeType) < 0)
         return;
     Py_INCREF(&DegradeType);
@@ -818,16 +1028,31 @@ init_pyo(void)
         return;
     Py_INCREF(&CompressType);
     PyModule_AddObject(m, "Compress_base", (PyObject *)&CompressType);
+
+    if (PyType_Ready(&GateType) < 0)
+        return;
+    Py_INCREF(&GateType);
+    PyModule_AddObject(m, "Gate_base", (PyObject *)&GateType);
     
     if (PyType_Ready(&DelayType) < 0)
         return;
     Py_INCREF(&DelayType);
     PyModule_AddObject(m, "Delay_base", (PyObject *)&DelayType);
 
+    if (PyType_Ready(&SDelayType) < 0)
+        return;
+    Py_INCREF(&SDelayType);
+    PyModule_AddObject(m, "SDelay_base", (PyObject *)&SDelayType);
+    
     if (PyType_Ready(&WaveguideType) < 0)
         return;
     Py_INCREF(&WaveguideType);
     PyModule_AddObject(m, "Waveguide_base", (PyObject *)&WaveguideType);
+
+    if (PyType_Ready(&AllpassWGType) < 0)
+        return;
+    Py_INCREF(&AllpassWGType);
+    PyModule_AddObject(m, "AllpassWG_base", (PyObject *)&AllpassWGType);
     
     if (PyType_Ready(&MidictlType) < 0)
         return;
@@ -843,6 +1068,11 @@ init_pyo(void)
         return;
     Py_INCREF(&NoteinType);
     PyModule_AddObject(m, "Notein_base", (PyObject *)&NoteinType);
+
+    if (PyType_Ready(&MidiAdsrType) < 0)
+        return;
+    Py_INCREF(&MidiAdsrType);
+    PyModule_AddObject(m, "MidiAdsr_base", (PyObject *)&MidiAdsrType);
     
     if (PyType_Ready(&OscSendType) < 0)
         return;
@@ -864,6 +1094,11 @@ init_pyo(void)
     Py_INCREF(&TrigRandType);
     PyModule_AddObject(m, "TrigRand_base", (PyObject *)&TrigRandType);
 
+    if (PyType_Ready(&TrigRandIntType) < 0)
+        return;
+    Py_INCREF(&TrigRandIntType);
+    PyModule_AddObject(m, "TrigRandInt_base", (PyObject *)&TrigRandIntType);
+    
     if (PyType_Ready(&TrigChoiceType) < 0)
         return;
     Py_INCREF(&TrigChoiceType);
@@ -934,6 +1169,16 @@ init_pyo(void)
     Py_INCREF(&BandSplitType);
     PyModule_AddObject(m, "BandSplit_base", (PyObject *)&BandSplitType);
 
+    if (PyType_Ready(&FourBandMainType) < 0)
+        return;
+    Py_INCREF(&FourBandMainType);
+    PyModule_AddObject(m, "FourBandMain_base", (PyObject *)&FourBandMainType);
+    
+    if (PyType_Ready(&FourBandType) < 0)
+        return;
+    Py_INCREF(&FourBandType);
+    PyModule_AddObject(m, "FourBand_base", (PyObject *)&FourBandType);
+    
     if (PyType_Ready(&HilbertMainType) < 0)
         return;
     Py_INCREF(&HilbertMainType);
@@ -949,6 +1194,11 @@ init_pyo(void)
     Py_INCREF(&FollowerType);
     PyModule_AddObject(m, "Follower_base", (PyObject *)&FollowerType);
 
+    if (PyType_Ready(&Follower2Type) < 0)
+        return;
+    Py_INCREF(&Follower2Type);
+    PyModule_AddObject(m, "Follower2_base", (PyObject *)&Follower2Type);
+    
     if (PyType_Ready(&ZCrossType) < 0)
         return;
     Py_INCREF(&ZCrossType);
@@ -988,6 +1238,16 @@ init_pyo(void)
         return;
     Py_INCREF(&SelectorType);
     PyModule_AddObject(m, "Selector_base", (PyObject *)&SelectorType);
+
+    if (PyType_Ready(&MixerType) < 0)
+        return;
+    Py_INCREF(&MixerType);
+    PyModule_AddObject(m, "Mixer_base", (PyObject *)&MixerType);
+    
+    if (PyType_Ready(&MixerVoiceType) < 0)
+        return;
+    Py_INCREF(&MixerVoiceType);
+    PyModule_AddObject(m, "MixerVoice_base", (PyObject *)&MixerVoiceType);
     
     if (PyType_Ready(&CounterType) < 0)
         return;
@@ -998,6 +1258,11 @@ init_pyo(void)
         return;
     Py_INCREF(&ThreshType);
     PyModule_AddObject(m, "Thresh_base", (PyObject *)&ThreshType);
+
+    if (PyType_Ready(&PercentType) < 0)
+        return;
+    Py_INCREF(&PercentType);
+    PyModule_AddObject(m, "Percent_base", (PyObject *)&PercentType);
     
     if (PyType_Ready(&SelectType) < 0)
         return;
@@ -1033,6 +1298,26 @@ init_pyo(void)
         return;
     Py_INCREF(&ConvolveType);
     PyModule_AddObject(m, "Convolve_base", (PyObject *)&ConvolveType);
+
+    if (PyType_Ready(&IRWinSincType) < 0)
+        return;
+    Py_INCREF(&IRWinSincType);
+    PyModule_AddObject(m, "IRWinSinc_base", (PyObject *)&IRWinSincType);
+
+    if (PyType_Ready(&IRPulseType) < 0)
+        return;
+    Py_INCREF(&IRPulseType);
+    PyModule_AddObject(m, "IRPulse_base", (PyObject *)&IRPulseType);
+    
+    if (PyType_Ready(&IRAverageType) < 0)
+        return;
+    Py_INCREF(&IRAverageType);
+    PyModule_AddObject(m, "IRAverage_base", (PyObject *)&IRAverageType);
+
+    if (PyType_Ready(&IRFMType) < 0)
+        return;
+    Py_INCREF(&IRFMType);
+    PyModule_AddObject(m, "IRFM_base", (PyObject *)&IRFMType);
     
     if (PyType_Ready(&GranulatorType) < 0)
         return;

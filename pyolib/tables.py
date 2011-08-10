@@ -19,6 +19,7 @@ along with pyo.  If not, see <http://www.gnu.org/licenses/>.
 """
 from _core import *
 from _maps import *
+from _widgets import createGraphWindow
 from types import ListType
 
 ######################################################################
@@ -397,7 +398,7 @@ class ChebyTable(PyoTableObject):
         
 class HannTable(PyoTableObject):
     """
-    Generates Hanning window. 
+    Generates Hanning window function. 
     
     Parent class: PyoTableObject
     
@@ -408,8 +409,7 @@ class HannTable(PyoTableObject):
         
     Methods:
     
-    setSize(size) : Change the size of the table. This will redraw 
-        the envelope.
+    setSize(size) : Change the size of the table. This will redraw the envelope.
     
     Attributes:
     
@@ -453,6 +453,66 @@ class HannTable(PyoTableObject):
     @size.setter
     def size(self, x): self.setSize(x)
 
+class ParaTable(PyoTableObject):
+    """
+    Generates parabola window function. 
+
+    The parabola is a conic section, the intersection of a right circular conical 
+    surface and a plane parallel to a generating straight line of that surface.
+
+    Parent class: PyoTableObject
+
+    Parameters:
+
+    size : int, optional
+        Table size in samples. Defaults to 8192.
+
+    Methods:
+
+    setSize(size) : Change the size of the table. This will redraw the envelope.
+
+    Attributes:
+
+    size : int
+        Table size in samples.
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> # Parabola envelope
+    >>> t = ParaTable()
+    >>> a = Osc(table=t, freq=2, mul=.5)
+    >>> b = Sine(freq=500, mul=a).out()
+
+    """
+    def __init__(self, size=8192):
+        self._size = size
+        self._base_objs = [ParaTable_base(size)]
+
+    def __dir__(self):
+        return ['size']
+
+    def setSize(self, size):
+        """
+        Change the size of the table. This will redraw the envelope.
+
+        Parameters:
+
+        size : int
+            New table size in samples.
+
+        """
+        self._size = size
+        [obj.setSize(size) for obj in self._base_objs]
+
+    @property
+    def size(self): 
+        """int. Table size in samples."""
+        return self._size
+    @size.setter
+    def size(self, x): self.setSize(x)
+
 class LinTable(PyoTableObject):
     """
     Construct a table from segments of straight lines in breakpoint fashion.
@@ -473,6 +533,8 @@ class LinTable(PyoTableObject):
     
     setSize(size) : Change the size of the table and rescale the envelope.
     replace(list) : Draw a new envelope according to the `list` parameter.
+    graph(yrange, title, wxnoserver) : Opens a grapher window to control 
+        the shape of the envelope.
 
     Notes:
     
@@ -532,7 +594,34 @@ class LinTable(PyoTableObject):
 
     def getPoints(self):
         return self._base_objs[0].getPoints()
+
+    def graph(self, yrange=(0.0, 1.0), title=None, wxnoserver=False):
+        """
+        Opens a grapher window to control the shape of the envelope.
+
+        When editing the grapher with the mouse, the new set of points
+        will be send to the object on mouse up. 
         
+        Ctrl+C with focus on the grapher will copy the list of points to the 
+        clipboard, giving an easy way to insert the new shape in a script.
+
+        Parameters:
+
+        yrange : tuple, optional
+            Set the min and max values of the Y axis of the graph.
+            Defaults to (0.0, 1.0).
+        title : string, optional
+            Title of the window. If none is provided, the name of the 
+            class is used.
+        wxnoserver : boolean, optional
+            With wxPython graphical toolkit, if True, tells the 
+            interpreter that there will be no server window and not 
+            to wait for it before showing the controller window. 
+            Defaults to False.
+
+        """
+        createGraphWindow(self, 0, self._size, yrange, title, wxnoserver)
+
     @property
     def size(self):
         """int. Table size in samples.""" 
@@ -567,6 +656,8 @@ class CosTable(PyoTableObject):
     
     setSize(size) : Change the size of the table and rescale the envelope.
     replace(list) : Draw a new envelope according to the `list` parameter.
+    graph(yrange, title, wxnoserver) : Opens a grapher window to control 
+        the shape of the envelope.
 
     Notes:
     
@@ -626,6 +717,33 @@ class CosTable(PyoTableObject):
 
     def getPoints(self):
         return self._base_objs[0].getPoints()
+
+    def graph(self, yrange=(0.0, 1.0), title=None, wxnoserver=False):
+        """
+        Opens a grapher window to control the shape of the envelope.
+
+        When editing the grapher with the mouse, the new set of points
+        will be send to the object on mouse up. 
+
+        Ctrl+C with focus on the grapher will copy the list of points to the 
+        clipboard, giving an easy way to insert the new shape in a script.
+
+        Parameters:
+
+        yrange : tuple, optional
+            Set the min and max values of the Y axis of the graph.
+            Defaults to (0.0, 1.0).
+        title : string, optional
+            Title of the window. If none is provided, the name of the 
+            class is used.
+        wxnoserver : boolean, optional
+            With wxPython graphical toolkit, if True, tells the 
+            interpreter that there will be no server window and not 
+            to wait for it before showing the controller window. 
+            Defaults to False.
+
+        """
+        createGraphWindow(self, 1, self._size, yrange, title, wxnoserver)
         
     @property
     def size(self):
@@ -676,6 +794,8 @@ class CurveTable(PyoTableObject):
     setTension(x) : Replace the `tension` attribute.
     setTension(x) : Replace the `bias` attribute.
     replace(list) : Draw a new envelope according to the `list` parameter.
+    graph(yrange, title, wxnoserver) : Opens a grapher window to control 
+        the shape of the envelope.
     
     Notes:
     
@@ -775,6 +895,33 @@ class CurveTable(PyoTableObject):
         
     def getPoints(self):
         return self._base_objs[0].getPoints()
+
+    def graph(self, yrange=(0.0, 1.0), title=None, wxnoserver=False):
+        """
+        Opens a grapher window to control the shape of the envelope.
+
+        When editing the grapher with the mouse, the new set of points
+        will be send to the object on mouse up. 
+
+        Ctrl+C with focus on the grapher will copy the list of points to the 
+        clipboard, giving an easy way to insert the new shape in a script.
+
+        Parameters:
+
+        yrange : tuple, optional
+            Set the min and max values of the Y axis of the graph.
+            Defaults to (0.0, 1.0).
+        title : string, optional
+            Title of the window. If none is provided, the name of the 
+            class is used.
+        wxnoserver : boolean, optional
+            With wxPython graphical toolkit, if True, tells the 
+            interpreter that there will be no server window and not 
+            to wait for it before showing the controller window. 
+            Defaults to False.
+
+        """
+        createGraphWindow(self, 3, self._size, yrange, title, wxnoserver)
         
     @property
     def size(self):
@@ -832,7 +979,9 @@ class ExpTable(PyoTableObject):
     setExp(x) : Replace the `exp` attribute.
     setInverse(x) : Replace the `inverse` attribute.
     replace(list) : Draw a new envelope according to the `list` parameter.
-    
+    graph(yrange, title, wxnoserver) : Opens a grapher window to control 
+        the shape of the envelope.
+
     Notes:
     
     Locations in the list must be in increasing order. If the last value 
@@ -922,7 +1071,34 @@ class ExpTable(PyoTableObject):
         
     def getPoints(self):
         return self._base_objs[0].getPoints()
-        
+
+    def graph(self, yrange=(0.0, 1.0), title=None, wxnoserver=False):
+        """
+        Opens a grapher window to control the shape of the envelope.
+
+        When editing the grapher with the mouse, the new set of points
+        will be send to the object on mouse up. 
+
+        Ctrl+C with focus on the grapher will copy the list of points to the 
+        clipboard, giving an easy way to insert the new shape in a script.
+
+        Parameters:
+
+        yrange : tuple, optional
+            Set the min and max values of the Y axis of the graph.
+            Defaults to (0.0, 1.0).
+        title : string, optional
+            Title of the window. If none is provided, the name of the 
+            class is used.
+        wxnoserver : boolean, optional
+            With wxPython graphical toolkit, if True, tells the 
+            interpreter that there will be no server window and not 
+            to wait for it before showing the controller window. 
+            Defaults to False.
+
+        """
+        createGraphWindow(self, 2, self._size, yrange, title, wxnoserver)
+
     @property
     def size(self):
         """int. Table size in samples.""" 
@@ -1036,7 +1212,7 @@ class SndTable(PyoTableObject):
                 obj.setSound(p, 0)
         else:    
             _size, _dur, _snd_sr, _snd_chnls = sndinfo(path)
-            self._size = size
+            self._size = _size
             self._dur = _dur
             self._path = path
             [obj.setSound(path, (i%_snd_chnls)) for i, obj in enumerate(self._base_objs)]
@@ -1086,7 +1262,7 @@ class NewTable(PyoTableObject):
         to an oscillator to read the sound at its original pitch.
     replace() : Replaces the actual table.
 
-    See also: TableRec
+    See also: DataTable, TableRec
 
     Examples:
     
@@ -1156,6 +1332,92 @@ class NewTable(PyoTableObject):
         Returns the frequency (cycle per second) to give to an 
         oscillator to read the sound at its original pitch.
         
+        """
+        return self._base_objs[0].getRate()
+
+class DataTable(PyoTableObject):
+    """
+    Create an empty table ready for data recording. 
+
+    See `TableRec` to write samples in the table.
+
+    Parent class: PyoTableObject
+
+    Parameters:
+
+    size : int
+        Size of the table in samples.
+    chnls : int, optional
+        Number of channels that will be handled by the table. 
+        Defaults to 1.
+    init : list of floats, optional
+        Initial table. List of list can match the number of channels,
+        otherwise, the list will be loaded in all tablestreams. 
+        Defaults to None.
+
+    Methods:    
+
+    getSize() : Returns the length of the table in samples.
+    getRate() : Returns the frequency (cycle per second) to give 
+        to an oscillator to read the sound at its original pitch.
+    replace() : Replaces the actual table.
+
+    See also: NewTable, TableRec
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> import random
+    >>> notes = [midiToHz(random.randint(60,84)) for i in range(10)]
+    >>> tab = DataTable(size=10, init=notes)
+    >>> ind = RandInt(10, 8)
+    >>> pit = TableIndex(tab, ind)
+    >>> a = SineLoop(freq=pit, feedback = 0.05, mul=.5).out()
+
+    """
+    def __init__(self, size, chnls=1, init=None):
+        self._size = size
+        self._chnls = chnls
+        if init == None:
+            self._base_objs = [DataTable_base(size) for i in range(chnls)]
+        else:
+            if type(init[0]) != ListType: 
+                init = [init]
+            self._base_objs = [DataTable_base(size, wrap(init,i)) for i in range(chnls)]
+
+
+    def __dir__(self):
+        return []
+
+    def replace(self, x):
+        """
+        Replaces the actual table.
+
+        Parameters:
+
+        x : list of floats
+            New table. Must be of the same size as the actual table.
+            List of list can match the number of channels, otherwise, 
+            the list will be loaded in all tablestreams.
+
+        """
+        if type(x[0]) != ListType: 
+            x = [x]
+        [obj.setTable(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def getSize(self):
+        """
+        Returns the length of the table in samples.
+
+        """
+        return self._base_objs[0].getSize()
+
+    def getRate(self):
+        """
+        Returns the frequency (cycle per second) to give to an 
+        oscillator to read the sound at its original pitch.
+
         """
         return self._base_objs[0].getRate()
 

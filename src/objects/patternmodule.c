@@ -31,14 +31,14 @@ typedef struct {
     PyObject *time;
     Stream *time_stream;
     int modebuffer[1];
-    float sampleToSec;
-    float currentTime;
+    MYFLT sampleToSec;
+    double currentTime;
     int init;
 } Pattern;
 
 static void
 Pattern_generate_i(Pattern *self) {
-    float tm;
+    MYFLT tm;
     int i, flag;
     
     flag = 0;
@@ -53,7 +53,7 @@ Pattern_generate_i(Pattern *self) {
         self->currentTime += self->sampleToSec;
     }
     if (flag == 1 || self->init == 1) {
-        PyObject_CallFunctionObjArgs(self->callable, NULL);
+        PyObject_Call((PyObject *)self->callable, PyTuple_New(0), NULL);
         self->init = 0;
     }
 }
@@ -62,7 +62,7 @@ static void
 Pattern_generate_a(Pattern *self) {
     int i, flag;
     
-    float *tm = Stream_getData((Stream *)self->time_stream);
+    MYFLT *tm = Stream_getData((Stream *)self->time_stream);
     
     flag = 0;
     for (i=0; i<self->bufsize; i++) {
@@ -74,7 +74,7 @@ Pattern_generate_a(Pattern *self) {
         self->currentTime += self->sampleToSec;
     }
     if (flag == 1 || self->init == 1) {
-        PyObject_CallFunctionObjArgs(self->callable, NULL);
+        PyObject_Call((PyObject *)self->callable, PyTuple_New(0), NULL);
         self->init = 0;
     }    
 }
@@ -133,6 +133,7 @@ static PyObject * Pattern_deleteStream(Pattern *self) { DELETE_STREAM };
 static PyObject *
 Pattern_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Pattern *self;
     self = (Pattern *)type->tp_alloc(type, 0);
     
@@ -161,12 +162,10 @@ Pattern_init(Pattern *self, PyObject *args, PyObject *kwds)
     
     if (! PyArg_ParseTupleAndKeywords(args, kwds, "O|O", kwlist, &calltmp, &timetmp))
         return -1; 
- 
-    if (! PyFunction_Check(calltmp))
-        return -1;
-    
-    Py_XDECREF(self->callable);
-    self->callable = calltmp;
+   
+    if (calltmp) {
+        PyObject_CallMethod((PyObject *)self, "setFunction", "O", calltmp);
+    }
     
     if (timetmp) {
         PyObject_CallMethod((PyObject *)self, "setTime", "O", timetmp);
@@ -176,9 +175,7 @@ Pattern_init(Pattern *self, PyObject *args, PyObject *kwds)
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
 
     (*self->mode_func_ptr)(self);
-    
-    Pattern_compute_next_data_frame((Pattern *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -187,13 +184,33 @@ static PyObject * Pattern_getServer(Pattern* self) { GET_SERVER };
 static PyObject * Pattern_getStream(Pattern* self) { GET_STREAM };
 
 static PyObject * 
-Pattern_play(Pattern *self) 
+Pattern_play(Pattern *self, PyObject *args, PyObject *kwds) 
 { 
     self->init = 1;
     PLAY 
 };
 
 static PyObject * Pattern_stop(Pattern *self) { STOP };
+
+static PyObject *
+Pattern_setFunction(Pattern *self, PyObject *arg)
+{
+	PyObject *tmp;
+	
+	if (! PyCallable_Check(arg)) {
+        PyErr_SetString(PyExc_TypeError, "The callable attribute must be a valid Python function.");
+		Py_INCREF(Py_None);
+		return Py_None;
+	}
+    
+    tmp = arg;
+    Py_XDECREF(self->callable);
+    Py_INCREF(tmp);
+    self->callable = tmp;
+    
+	Py_INCREF(Py_None);
+	return Py_None;
+}	
 
 static PyObject *
 Pattern_setTime(Pattern *self, PyObject *arg)
@@ -240,9 +257,10 @@ static PyMethodDef Pattern_methods[] = {
 {"getServer", (PyCFunction)Pattern_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Pattern_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Pattern_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Pattern_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Pattern_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)Pattern_stop, METH_NOARGS, "Stops computing."},
 {"setTime", (PyCFunction)Pattern_setTime, METH_O, "Sets time factor."},
+{"setFunction", (PyCFunction)Pattern_setFunction, METH_O, "Sets the function to be called."},
 {NULL}  /* Sentinel */
 };
 
@@ -304,12 +322,12 @@ static void
 Score_selector(Score *self) {
     int i, inval, state, res;
     
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inval = (int)in[i];
         if (inval != self->last_value) {
-            res = sprintf(&self->curfname, "%s%i()\n", self->fname, inval);
+            res = sprintf(self->curfname, "%s%i()\n", self->fname, inval);
             state = PyRun_SimpleString(self->curfname);
             self->last_value = inval;
         }    
@@ -360,6 +378,7 @@ static PyObject * Score_deleteStream(Score *self) { DELETE_STREAM };
 static PyObject *
 Score_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Score *self;
     self = (Score *)type->tp_alloc(type, 0);
     
@@ -375,7 +394,6 @@ Score_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 static int
 Score_init(Score *self, PyObject *args, PyObject *kwds)
 {
-    int i;
     PyObject *inputtmp, *input_streamtmp;
     
     static char *kwlist[] = {"input", "fname", NULL};
@@ -387,15 +405,8 @@ Score_init(Score *self, PyObject *args, PyObject *kwds)
     
     Py_INCREF(self->stream);
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
-    
-    for (i=0; i<self->bufsize; i++) {
-        self->data[i] = 0.0;
-    }
-    Stream_setData(self->stream, self->data);
-    
+        
     (*self->mode_func_ptr)(self);
-    
-    Score_compute_next_data_frame((Score *)self);
     
     Py_INCREF(self);
     return 0;
@@ -404,7 +415,7 @@ Score_init(Score *self, PyObject *args, PyObject *kwds)
 static PyObject * Score_getServer(Score* self) { GET_SERVER };
 static PyObject * Score_getStream(Score* self) { GET_STREAM };
 
-static PyObject * Score_play(Score *self) { PLAY };
+static PyObject * Score_play(Score *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Score_stop(Score *self) { STOP };
 
 static PyMemberDef Score_members[] = {
@@ -417,7 +428,7 @@ static PyMethodDef Score_methods[] = {
 {"getServer", (PyCFunction)Score_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Score_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Score_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Score_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Score_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)Score_stop, METH_NOARGS, "Stops computing."},
 {NULL}  /* Sentinel */
 };
@@ -471,9 +482,9 @@ typedef struct {
     pyo_audio_HEAD
     PyObject *callable;
     PyObject *arg;
-    float time;
-    float sampleToSec;
-    float currentTime;
+    MYFLT time;
+    MYFLT sampleToSec;
+    double currentTime;
 } CallAfter;
 
 static void
@@ -536,6 +547,7 @@ static PyObject * CallAfter_deleteStream(CallAfter *self) { DELETE_STREAM };
 static PyObject *
 CallAfter_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     CallAfter *self;
     self = (CallAfter *)type->tp_alloc(type, 0);
     
@@ -578,9 +590,7 @@ CallAfter_init(CallAfter *self, PyObject *args, PyObject *kwds)
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
     (*self->mode_func_ptr)(self);
-    
-    CallAfter_compute_next_data_frame((CallAfter *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -588,7 +598,7 @@ CallAfter_init(CallAfter *self, PyObject *args, PyObject *kwds)
 static PyObject * CallAfter_getServer(CallAfter* self) { GET_SERVER };
 static PyObject * CallAfter_getStream(CallAfter* self) { GET_STREAM };
 
-static PyObject * CallAfter_play(CallAfter *self) { PLAY };
+static PyObject * CallAfter_play(CallAfter *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * CallAfter_stop(CallAfter *self) { STOP };
 
 static PyMemberDef CallAfter_members[] = {
@@ -601,7 +611,7 @@ static PyMethodDef CallAfter_methods[] = {
 {"getServer", (PyCFunction)CallAfter_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)CallAfter_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)CallAfter_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)CallAfter_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)CallAfter_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)CallAfter_stop, METH_NOARGS, "Stops computing."},
 {NULL}  /* Sentinel */
 };

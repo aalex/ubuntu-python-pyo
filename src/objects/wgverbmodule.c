@@ -27,8 +27,8 @@
 #include "dummymodule.h"
 
 
-static const float randomScaling = 0.5;
-static const float reverbParams[8][3] = {
+static const MYFLT randomScaling = 0.5;
+static const MYFLT reverbParams[8][3] = {
 { 2473.0, 0.0010, 3.100 },
 { 2767.0, 0.0011, 3.500 },
 { 3217.0, 0.0017, 1.110 },
@@ -51,35 +51,35 @@ typedef struct {
     Stream *mix_stream;
     void (*mix_func_ptr)();
     int modebuffer[5];
-    float total_signal;
-    float delays[8];
+    MYFLT total_signal;
+    MYFLT delays[8];
     long size[8];
     int in_count[8];
-    float *buffer[8];
+    MYFLT *buffer[8];
     // lowpass
-    float damp;
-    float lastFreq;
+    MYFLT damp;
+    MYFLT lastFreq;
     // sample memories
-    float lastSamples[8];
+    MYFLT lastSamples[8];
     // jitters
-    float rnd[8];
-    float rnd_value[8];
-    float rnd_oldValue[8];
-    float rnd_diff[8];
-    float rnd_time[8];
-    float rnd_timeInc[8];
-    float rnd_range[8];
-    float rnd_halfRange[8];
+    MYFLT rnd[8];
+    MYFLT rnd_value[8];
+    MYFLT rnd_oldValue[8];
+    MYFLT rnd_diff[8];
+    MYFLT rnd_time[8];
+    MYFLT rnd_timeInc[8];
+    MYFLT rnd_range[8];
+    MYFLT rnd_halfRange[8];
 } WGVerb;
 
 static void
 WGVerb_process_ii(WGVerb *self) {
-    float val, x, x1, xind, frac, junction, inval, filt;
+    MYFLT val, x, x1, xind, frac, junction, inval, filt;
     int i, j, ind;
     
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float feed = PyFloat_AS_DOUBLE(self->feedback);
-    float freq = PyFloat_AS_DOUBLE(self->cutoff);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT feed = PyFloat_AS_DOUBLE(self->feedback);
+    MYFLT freq = PyFloat_AS_DOUBLE(self->cutoff);
         
     if (feed < 0)
         feed = 0;
@@ -88,8 +88,8 @@ WGVerb_process_ii(WGVerb *self) {
 
     if (freq != self->lastFreq) {
         self->lastFreq = freq;
-        self->damp = 2.0 - cosf(TWOPI * freq / self->sr);
-        self->damp = (self->damp - sqrtf(self->damp * self->damp - 1.0));
+        self->damp = 2.0 - MYCOS(TWOPI * freq / self->sr);
+        self->damp = (self->damp - MYSQRT(self->damp * self->damp - 1.0));
     }
     
     for (i=0; i<self->bufsize; i++) {
@@ -103,14 +103,14 @@ WGVerb_process_ii(WGVerb *self) {
             else if (self->rnd_time[j] >= 1.0) {
                 self->rnd_time[j] -= 1.0;
                 self->rnd_oldValue[j] = self->rnd_value[j];
-                self->rnd_value[j] = self->rnd_range[j] * (rand()/((float)(RAND_MAX)+1)) - self->rnd_halfRange[j];
+                self->rnd_value[j] = self->rnd_range[j] * (rand()/((MYFLT)(RAND_MAX)+1)) - self->rnd_halfRange[j];
                 self->rnd_diff[j] = self->rnd_value[j] - self->rnd_oldValue[j];
             }
             self->rnd[j] = self->rnd_oldValue[j] + self->rnd_diff[j] * self->rnd_time[j];
             
             xind = self->in_count[j] - (self->delays[j] + self->rnd[j]);
             if (xind < 0)
-                xind += (self->size[j]-1);
+                xind += self->size[j];
             ind = (int)xind;
             frac = xind - ind;
             x = self->buffer[j][ind];
@@ -122,6 +122,8 @@ WGVerb_process_ii(WGVerb *self) {
         
             self->buffer[j][self->in_count[j]] = inval + junction - self->lastSamples[j];
             self->lastSamples[j] = filt;
+            if(self->in_count[j] == 0)
+                self->buffer[j][self->size[j]] = self->buffer[j][0];
             self->in_count[j]++;
             if (self->in_count[j] >= self->size[j])
                 self->in_count[j] = 0;
@@ -132,17 +134,17 @@ WGVerb_process_ii(WGVerb *self) {
 
 static void
 WGVerb_process_ai(WGVerb *self) {
-    float val, x, x1, xind, frac, junction, inval, filt, feed;
+    MYFLT val, x, x1, xind, frac, junction, inval, filt, feed;
     int i, j, ind;
     
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *feedback = Stream_getData((Stream *)self->feedback_stream);
-    float freq = PyFloat_AS_DOUBLE(self->cutoff);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *feedback = Stream_getData((Stream *)self->feedback_stream);
+    MYFLT freq = PyFloat_AS_DOUBLE(self->cutoff);
         
     if (freq != self->lastFreq) {
         self->lastFreq = freq;
-        self->damp = 2.0 - cosf(TWOPI * freq / self->sr);
-        self->damp = (self->damp - sqrtf(self->damp * self->damp - 1.0));
+        self->damp = 2.0 - MYCOS(TWOPI * freq / self->sr);
+        self->damp = (self->damp - MYSQRT(self->damp * self->damp - 1.0));
     }
     
     for (i=0; i<self->bufsize; i++) {
@@ -161,14 +163,14 @@ WGVerb_process_ai(WGVerb *self) {
             else if (self->rnd_time[j] >= 1.0) {
                 self->rnd_time[j] -= 1.0;
                 self->rnd_oldValue[j] = self->rnd_value[j];
-                self->rnd_value[j] = self->rnd_range[j] * (rand()/((float)(RAND_MAX)+1)) - self->rnd_halfRange[j];
+                self->rnd_value[j] = self->rnd_range[j] * (rand()/((MYFLT)(RAND_MAX)+1)) - self->rnd_halfRange[j];
                 self->rnd_diff[j] = self->rnd_value[j] - self->rnd_oldValue[j];
             }
             self->rnd[j] = self->rnd_oldValue[j] + self->rnd_diff[j] * self->rnd_time[j];
             
             xind = self->in_count[j] - (self->delays[j] + self->rnd[j]);
             if (xind < 0)
-                xind += (self->size[j]-1);
+                xind += self->size[j];
             ind = (int)xind;
             frac = xind - ind;
             x = self->buffer[j][ind];
@@ -180,6 +182,8 @@ WGVerb_process_ai(WGVerb *self) {
             
             self->buffer[j][self->in_count[j]] = inval + junction - self->lastSamples[j];
             self->lastSamples[j] = filt;
+            if(self->in_count[j] == 0)
+                self->buffer[j][self->size[j]] = self->buffer[j][0];
             self->in_count[j]++;
             if (self->in_count[j] >= self->size[j])
                 self->in_count[j] = 0;
@@ -190,12 +194,12 @@ WGVerb_process_ai(WGVerb *self) {
 
 static void
 WGVerb_process_ia(WGVerb *self) {
-    float val, x, x1, xind, frac, junction, inval, filt, freq;
+    MYFLT val, x, x1, xind, frac, junction, inval, filt, freq;
     int i, j, ind;
     
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float feed = PyFloat_AS_DOUBLE(self->feedback);
-    float *cutoff = Stream_getData((Stream *)self->cutoff_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT feed = PyFloat_AS_DOUBLE(self->feedback);
+    MYFLT *cutoff = Stream_getData((Stream *)self->cutoff_stream);
     
     if (feed < 0)
         feed = 0;
@@ -207,8 +211,8 @@ WGVerb_process_ia(WGVerb *self) {
         freq = cutoff[i];
         if (freq != self->lastFreq) {
             self->lastFreq = freq;
-            self->damp = 2.0 - cosf(TWOPI * freq / self->sr);
-            self->damp = (self->damp - sqrtf(self->damp * self->damp - 1.0));
+            self->damp = 2.0 - MYCOS(TWOPI * freq / self->sr);
+            self->damp = (self->damp - MYSQRT(self->damp * self->damp - 1.0));
         }        
         junction = self->total_signal * .25;
         self->total_signal = 0.0;
@@ -219,14 +223,14 @@ WGVerb_process_ia(WGVerb *self) {
             else if (self->rnd_time[j] >= 1.0) {
                 self->rnd_time[j] -= 1.0;
                 self->rnd_oldValue[j] = self->rnd_value[j];
-                self->rnd_value[j] = self->rnd_range[j] * (rand()/((float)(RAND_MAX)+1)) - self->rnd_halfRange[j];
+                self->rnd_value[j] = self->rnd_range[j] * (rand()/((MYFLT)(RAND_MAX)+1)) - self->rnd_halfRange[j];
                 self->rnd_diff[j] = self->rnd_value[j] - self->rnd_oldValue[j];
             }
             self->rnd[j] = self->rnd_oldValue[j] + self->rnd_diff[j] * self->rnd_time[j];
             
             xind = self->in_count[j] - (self->delays[j] + self->rnd[j]);
             if (xind < 0)
-                xind += (self->size[j]-1);
+                xind += self->size[j];
             ind = (int)xind;
             frac = xind - ind;
             x = self->buffer[j][ind];
@@ -238,6 +242,8 @@ WGVerb_process_ia(WGVerb *self) {
             
             self->buffer[j][self->in_count[j]] = inval + junction - self->lastSamples[j];
             self->lastSamples[j] = filt;
+            if(self->in_count[j] == 0)
+                self->buffer[j][self->size[j]] = self->buffer[j][0];
             self->in_count[j]++;
             if (self->in_count[j] >= self->size[j])
                 self->in_count[j] = 0;
@@ -248,12 +254,12 @@ WGVerb_process_ia(WGVerb *self) {
 
 static void
 WGVerb_process_aa(WGVerb *self) {
-    float val, x, x1, xind, frac, junction, inval, filt, feed, freq;
+    MYFLT val, x, x1, xind, frac, junction, inval, filt, feed, freq;
     int i, j, ind;
     
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *feedback = Stream_getData((Stream *)self->feedback_stream);
-    float *cutoff = Stream_getData((Stream *)self->cutoff_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *feedback = Stream_getData((Stream *)self->feedback_stream);
+    MYFLT *cutoff = Stream_getData((Stream *)self->cutoff_stream);
 
     for (i=0; i<self->bufsize; i++) {
         inval = in[i];
@@ -265,8 +271,8 @@ WGVerb_process_aa(WGVerb *self) {
             feed = 1;        
         if (freq != self->lastFreq) {
             self->lastFreq = freq;
-            self->damp = 2.0 - cosf(TWOPI * freq / self->sr);
-            self->damp = (self->damp - sqrtf(self->damp * self->damp - 1.0));
+            self->damp = 2.0 - MYCOS(TWOPI * freq / self->sr);
+            self->damp = (self->damp - MYSQRT(self->damp * self->damp - 1.0));
         }        
         junction = self->total_signal * .25;
         self->total_signal = 0.0;
@@ -277,14 +283,14 @@ WGVerb_process_aa(WGVerb *self) {
             else if (self->rnd_time[j] >= 1.0) {
                 self->rnd_time[j] -= 1.0;
                 self->rnd_oldValue[j] = self->rnd_value[j];
-                self->rnd_value[j] = self->rnd_range[j] * (rand()/((float)(RAND_MAX)+1)) - self->rnd_halfRange[j];
+                self->rnd_value[j] = self->rnd_range[j] * (rand()/((MYFLT)(RAND_MAX)+1)) - self->rnd_halfRange[j];
                 self->rnd_diff[j] = self->rnd_value[j] - self->rnd_oldValue[j];
             }
             self->rnd[j] = self->rnd_oldValue[j] + self->rnd_diff[j] * self->rnd_time[j];
             
             xind = self->in_count[j] - (self->delays[j] + self->rnd[j]);
             if (xind < 0)
-                xind += (self->size[j]-1);
+                xind += self->size[j];
             ind = (int)xind;
             frac = xind - ind;
             x = self->buffer[j][ind];
@@ -296,6 +302,8 @@ WGVerb_process_aa(WGVerb *self) {
             
             self->buffer[j][self->in_count[j]] = inval + junction - self->lastSamples[j];
             self->lastSamples[j] = filt;
+            if(self->in_count[j] == 0)
+                self->buffer[j][self->size[j]] = self->buffer[j][0];
             self->in_count[j]++;
             if (self->in_count[j] >= self->size[j])
                 self->in_count[j] = 0;
@@ -307,10 +315,10 @@ WGVerb_process_aa(WGVerb *self) {
 static void
 WGVerb_mix_i(WGVerb *self) {
     int i;
-    float val;
+    MYFLT val;
     
-    float mix = PyFloat_AS_DOUBLE(self->mix);
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT mix = PyFloat_AS_DOUBLE(self->mix);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
     if (mix < 0.0)
         mix = 0.0;
@@ -326,10 +334,10 @@ WGVerb_mix_i(WGVerb *self) {
 static void
 WGVerb_mix_a(WGVerb *self) {
     int i;
-    float mix, val;
+    MYFLT mix, val;
     
-    float *mi = Stream_getData((Stream *)self->mix_stream);
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *mi = Stream_getData((Stream *)self->mix_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
     for (i=0; i<self->bufsize; i++) {
         mix = mi[i];
@@ -549,16 +557,14 @@ WGVerb_init(WGVerb *self, PyObject *args, PyObject *kwds)
 
     for (i=0; i<8; i++) {
         self->size[i] = reverbParams[i][0] * (self->sr / 44100.0) + (int)(reverbParams[i][1] * self->sr + 0.5);
-        self->buffer[i] = (float *)realloc(self->buffer[i], (self->size[i]+1) * sizeof(float));
+        self->buffer[i] = (MYFLT *)realloc(self->buffer[i], (self->size[i]+1) * sizeof(MYFLT));
         for (j=0; j<(self->size[i]+1); j++) {
             self->buffer[i][j] = 0.;
         }    
     }    
     
     (*self->mode_func_ptr)(self);
-    
-    WGVerb_compute_next_data_frame((WGVerb *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -570,7 +576,7 @@ static PyObject * WGVerb_setAdd(WGVerb *self, PyObject *arg) { SET_ADD };
 static PyObject * WGVerb_setSub(WGVerb *self, PyObject *arg) { SET_SUB };	
 static PyObject * WGVerb_setDiv(WGVerb *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * WGVerb_play(WGVerb *self) { PLAY };
+static PyObject * WGVerb_play(WGVerb *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * WGVerb_out(WGVerb *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * WGVerb_stop(WGVerb *self) { STOP };
 
@@ -701,7 +707,7 @@ static PyMethodDef WGVerb_methods[] = {
 {"getServer", (PyCFunction)WGVerb_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)WGVerb_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)WGVerb_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)WGVerb_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)WGVerb_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"out", (PyCFunction)WGVerb_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)WGVerb_stop, METH_NOARGS, "Stops computing."},
 {"setFeedback", (PyCFunction)WGVerb_setFeedback, METH_O, "Sets feedback value between 0 -> 1."},

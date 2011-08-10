@@ -40,13 +40,13 @@ typedef struct {
     char *recpath;
     SNDFILE *recfile;
     SF_INFO recinfo;
-    float *buffer;
+    MYFLT *buffer;
 } Record;
 
 static void
 Record_process(Record *self) {
     int i, j, chnl, offset, totlen;
-    float *in;
+    MYFLT *in;
 
     totlen = self->chnls*self->bufsize*self->buffering;
     
@@ -69,7 +69,7 @@ Record_process(Record *self) {
     self->count++;
     
     if (self->count == self->buffering)
-        sf_write_float(self->recfile, self->buffer, totlen);
+        SF_WRITE(self->recfile, self->buffer, totlen);
 }
 
 static void
@@ -117,6 +117,7 @@ static PyObject * Record_deleteStream(Record *self) { DELETE_STREAM };
 static PyObject *
 Record_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Record *self;
     self = (Record *)type->tp_alloc(type, 0);
     
@@ -134,12 +135,13 @@ static int
 Record_init(Record *self, PyObject *args, PyObject *kwds)
 {
     int i, buflen;
-    int format = 0;
+    int fileformat = 0;
+    int sampletype = 0;
     PyObject *input_listtmp;
     
-    static char *kwlist[] = {"input", "filename", "chnls", "format", "buffering", NULL};
+    static char *kwlist[] = {"input", "filename", "chnls", "fileformat", "sampletype", "buffering", NULL};
     
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "Os|iii", kwlist, &input_listtmp, &self->recpath, &self->chnls, &format, &self->buffering))
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "Os|iiii", kwlist, &input_listtmp, &self->recpath, &self->chnls, &fileformat, &sampletype, &self->buffering))
         return -1; 
     
     Py_XDECREF(self->input_list);
@@ -153,30 +155,30 @@ Record_init(Record *self, PyObject *args, PyObject *kwds)
     /* Prepare sfinfo */
     self->recinfo.samplerate = (int)self->sr;
     self->recinfo.channels = self->chnls;
-    switch (format) {
+    
+    switch (fileformat) {
         case 0:
-            self->recinfo.format = SF_FORMAT_AIFF | SF_FORMAT_FLOAT;
+            self->recinfo.format = SF_FORMAT_WAV;
             break;
-        case 1:    
-            self->recinfo.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
+        case 1:
+            self->recinfo.format = SF_FORMAT_AIFF;
+            break;
+    }
+    switch (sampletype) {
+        case 0:
+            self->recinfo.format = self->recinfo.format | SF_FORMAT_PCM_16;
+            break;
+        case 1:
+            self->recinfo.format = self->recinfo.format | SF_FORMAT_PCM_24;
             break;
         case 2:
-            self->recinfo.format = SF_FORMAT_AIFF | SF_FORMAT_PCM_16;
+            self->recinfo.format = self->recinfo.format | SF_FORMAT_PCM_32;
             break;
-        case 3:    
-            self->recinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
+        case 3:
+            self->recinfo.format = self->recinfo.format | SF_FORMAT_FLOAT;
             break;
         case 4:
-            self->recinfo.format = SF_FORMAT_AIFF | SF_FORMAT_PCM_24;
-            break;
-        case 5:    
-            self->recinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_24;
-            break;
-        case 6:
-            self->recinfo.format = SF_FORMAT_AIFF | SF_FORMAT_PCM_32;
-            break;
-        case 7:    
-            self->recinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_32;
+            self->recinfo.format = self->recinfo.format | SF_FORMAT_DOUBLE;
             break;
     }
     
@@ -186,7 +188,7 @@ Record_init(Record *self, PyObject *args, PyObject *kwds)
     }	
 
     buflen = self->bufsize * self->chnls * self->buffering;
-    self->buffer = (float *)realloc(self->buffer, buflen * sizeof(float));
+    self->buffer = (MYFLT *)realloc(self->buffer, buflen * sizeof(MYFLT));
     for (i=0; i<buflen; i++) {
         self->buffer[i] = 0.;
     }    
@@ -195,9 +197,7 @@ Record_init(Record *self, PyObject *args, PyObject *kwds)
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
     (*self->mode_func_ptr)(self);
-    
-    Record_compute_next_data_frame((Record *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -205,7 +205,7 @@ Record_init(Record *self, PyObject *args, PyObject *kwds)
 static PyObject * Record_getServer(Record* self) { GET_SERVER };
 static PyObject * Record_getStream(Record* self) { GET_STREAM };
 
-static PyObject * Record_play(Record *self) { PLAY };
+static PyObject * Record_play(Record *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Record_stop(Record *self) 
 { 
     sf_close(self->recfile);
@@ -223,7 +223,7 @@ static PyMethodDef Record_methods[] = {
 {"getServer", (PyCFunction)Record_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Record_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Record_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Record_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Record_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)Record_stop, METH_NOARGS, "Stops computing."},
 {NULL}  /* Sentinel */
 };

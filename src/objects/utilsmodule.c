@@ -34,16 +34,16 @@ typedef struct {
     PyObject *input;
     Stream *input_stream;
     int method; // 0 -> interval, 1 -> change
-    float lastValue;
-    float time;
-    float currentTime;
-    float sampleToSec;
+    MYFLT lastValue;
+    MYFLT time;
+    MYFLT currentTime;
+    MYFLT sampleToSec;
 } Print;
 
 static void
 Print_process_time(Print *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
     for (i=0; i<self->bufsize; i++) {
         if (self->currentTime >= self->time) {
@@ -57,8 +57,8 @@ Print_process_time(Print *self) {
 static void
 Print_process_change(Print *self) {
     int i;
-    float inval;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT inval;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
 
     for (i=0; i<self->bufsize; i++) {
         inval = in[i];
@@ -122,6 +122,7 @@ static PyObject * Print_deleteStream(Print *self) { DELETE_STREAM };
 static PyObject *
 Print_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Print *self;
     self = (Print *)type->tp_alloc(type, 0);
 
@@ -142,7 +143,6 @@ Print_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 static int
 Print_init(Print *self, PyObject *args, PyObject *kwds)
 {
-    int i;
     PyObject *inputtmp, *input_streamtmp;
     
     static char *kwlist[] = {"input", "method", "interval", NULL};
@@ -155,16 +155,8 @@ Print_init(Print *self, PyObject *args, PyObject *kwds)
     Py_INCREF(self->stream);
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
-    for (i=0; i<self->bufsize; i++) {
-        self->data[i] = 0.0;
-    }
-    
-    Stream_setData(self->stream, self->data);
-
     (*self->mode_func_ptr)(self);
-    
-    Print_compute_next_data_frame((Print *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -172,7 +164,7 @@ Print_init(Print *self, PyObject *args, PyObject *kwds)
 static PyObject * Print_getServer(Print* self) { GET_SERVER };
 static PyObject * Print_getStream(Print* self) { GET_STREAM };
 
-static PyObject * Print_play(Print *self) { PLAY };
+static PyObject * Print_play(Print *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Print_stop(Print *self) { STOP };
 
 static PyObject *
@@ -223,7 +215,7 @@ static PyMethodDef Print_methods[] = {
 {"getServer", (PyCFunction)Print_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Print_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Print_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Print_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Print_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)Print_stop, METH_NOARGS, "Stops computing."},
 {"setMethod", (PyCFunction)Print_setMethod, METH_O, "Sets the printing method."},
 {"setInterval", (PyCFunction)Print_setInterval, METH_O, "Sets the time interval."},
@@ -281,23 +273,23 @@ typedef struct {
     Stream *input_stream;
     int scale; // 0 = Midi, 1 = frequency, 2 = transpo
     int chSize;
-    float *choice;
-    float value;
-    float last_input;
+    MYFLT *choice;
+    MYFLT value;
+    MYFLT last_input;
     int modebuffer[2]; // need at least 2 slots for mul & add 
 } Snap;
 
-static float
+static MYFLT
 Snap_convert(Snap *self) {
     int midival;
-    float val;
+    MYFLT val;
     
     midival = self->value;
 
     if (self->scale == 1)
-        val = 8.175798 * powf(1.0594633, midival);
+        val = 8.1757989156437 * MYPOW(1.0594630943593, midival);
     else if (self->scale == 2)
-        val = powf(1.0594633, midival - 60);
+        val = MYPOW(1.0594630943593, midival - 60);
     else
         val = midival;
     
@@ -307,8 +299,8 @@ Snap_convert(Snap *self) {
 static void
 Snap_generate(Snap *self) {
     int i, j, pos;
-    float intmp, diff, difftmp;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT intmp, diff, difftmp;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
     for (i=0; i<self->bufsize; i++) {
         if (in[i] < (self->last_input-0.001) || in[i] > (self->last_input + 0.001)) {
@@ -318,10 +310,10 @@ Snap_generate(Snap *self) {
                 oct++;
                 intmp -= 12.0;
             }
-            diff = fabsf(self->choice[0]-intmp);
+            diff = MYFABS(self->choice[0]-intmp);
             pos = 0;
             for (j=1; j<self->chSize; j++) {
-                difftmp = fabsf(self->choice[j]-intmp);
+                difftmp = MYFABS(self->choice[j]-intmp);
                 if (difftmp < diff) {
                     diff = difftmp;
                     pos = j;
@@ -424,6 +416,7 @@ static PyObject * Snap_deleteStream(Snap *self) { DELETE_STREAM };
 static PyObject *
 Snap_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Snap *self;
     self = (Snap *)type->tp_alloc(type, 0);
     
@@ -466,9 +459,7 @@ Snap_init(Snap *self, PyObject *args, PyObject *kwds)
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
 
     (*self->mode_func_ptr)(self);
-    
-    Snap_compute_next_data_frame((Snap *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -480,7 +471,7 @@ static PyObject * Snap_setAdd(Snap *self, PyObject *arg) { SET_ADD };
 static PyObject * Snap_setSub(Snap *self, PyObject *arg) { SET_SUB };	
 static PyObject * Snap_setDiv(Snap *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * Snap_play(Snap *self) { PLAY };
+static PyObject * Snap_play(Snap *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Snap_out(Snap *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * Snap_stop(Snap *self) { STOP };
 
@@ -507,7 +498,7 @@ Snap_setChoice(Snap *self, PyObject *arg)
     
     tmp = arg;
     self->chSize = PyList_Size(tmp);
-    self->choice = (float *)realloc(self->choice, self->chSize * sizeof(float));
+    self->choice = (MYFLT *)realloc(self->choice, self->chSize * sizeof(MYFLT));
     
     for (i=0; i<self->chSize; i++) {
         self->choice[i] = PyFloat_AS_DOUBLE(PyNumber_Float(PyList_GET_ITEM(tmp, i)));
@@ -555,7 +546,7 @@ static PyMethodDef Snap_methods[] = {
     {"getServer", (PyCFunction)Snap_getServer, METH_NOARGS, "Returns server object."},
     {"_getStream", (PyCFunction)Snap_getStream, METH_NOARGS, "Returns stream object."},
     {"deleteStream", (PyCFunction)Snap_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-    {"play", (PyCFunction)Snap_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+    {"play", (PyCFunction)Snap_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
     {"out", (PyCFunction)Snap_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
     {"stop", (PyCFunction)Snap_stop, METH_NOARGS, "Stops computing."},
     {"setChoice", (PyCFunction)Snap_setChoice, METH_O, "Sets output scale."},
@@ -667,11 +658,11 @@ typedef struct {
 
 static void
 Interp_filters_i(Interp *self) {
-    float amp2;
+    MYFLT amp2;
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *in2 = Stream_getData((Stream *)self->input2_stream);
-    float inter = PyFloat_AS_DOUBLE(self->interp);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in2 = Stream_getData((Stream *)self->input2_stream);
+    MYFLT inter = PyFloat_AS_DOUBLE(self->interp);
 
     if (inter < 0.0)
         inter = 0.0;
@@ -686,11 +677,11 @@ Interp_filters_i(Interp *self) {
 
 static void
 Interp_filters_a(Interp *self) {
-    float amp1, amp2;
+    MYFLT amp1, amp2;
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *in2 = Stream_getData((Stream *)self->input2_stream);
-    float *inter = Stream_getData((Stream *)self->interp_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in2 = Stream_getData((Stream *)self->input2_stream);
+    MYFLT *inter = Stream_getData((Stream *)self->interp_stream);
     
     for (i=0; i<self->bufsize; i++) {
         amp1 = inter[i];
@@ -807,6 +798,7 @@ static PyObject * Interp_deleteStream(Interp *self) { DELETE_STREAM };
 static PyObject *
 Interp_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Interp *self;
     self = (Interp *)type->tp_alloc(type, 0);
     
@@ -856,9 +848,7 @@ Interp_init(Interp *self, PyObject *args, PyObject *kwds)
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
     (*self->mode_func_ptr)(self);
-    
-    Interp_compute_next_data_frame((Interp *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -870,7 +860,7 @@ static PyObject * Interp_setAdd(Interp *self, PyObject *arg) { SET_ADD };
 static PyObject * Interp_setSub(Interp *self, PyObject *arg) { SET_SUB };	
 static PyObject * Interp_setDiv(Interp *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * Interp_play(Interp *self) { PLAY };
+static PyObject * Interp_play(Interp *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Interp_out(Interp *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * Interp_stop(Interp *self) { STOP };
 
@@ -932,7 +922,7 @@ static PyMethodDef Interp_methods[] = {
 {"getServer", (PyCFunction)Interp_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Interp_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Interp_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Interp_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Interp_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"out", (PyCFunction)Interp_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)Interp_stop, METH_NOARGS, "Stops computing."},
 {"setInterp", (PyCFunction)Interp_setInterp, METH_O, "Sets filter cutoff interpuency in cycle per second."},
@@ -1038,18 +1028,18 @@ typedef struct {
     Stream *controlsig_stream;
     PyObject *value;
     Stream *value_stream;
-    float currentValue;
+    MYFLT currentValue;
     int flag;
     int modebuffer[3]; // need at least 2 slots for mul & add 
 } SampHold;
 
 static void
 SampHold_filters_i(SampHold *self) {
-    float ctrl;
+    MYFLT ctrl;
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *ctrlsig = Stream_getData((Stream *)self->controlsig_stream);
-    float val = PyFloat_AS_DOUBLE(self->value);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *ctrlsig = Stream_getData((Stream *)self->controlsig_stream);
+    MYFLT val = PyFloat_AS_DOUBLE(self->value);
 
     for (i=0; i<self->bufsize; i++) {
         ctrl = ctrlsig[i];
@@ -1067,11 +1057,11 @@ SampHold_filters_i(SampHold *self) {
 
 static void
 SampHold_filters_a(SampHold *self) {
-    float ctrl, val;
+    MYFLT ctrl, val;
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *ctrlsig = Stream_getData((Stream *)self->controlsig_stream);
-    float *valsig = Stream_getData((Stream *)self->value_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *ctrlsig = Stream_getData((Stream *)self->controlsig_stream);
+    MYFLT *valsig = Stream_getData((Stream *)self->value_stream);
     
     for (i=0; i<self->bufsize; i++) {
         ctrl = ctrlsig[i];
@@ -1191,6 +1181,7 @@ static PyObject * SampHold_deleteStream(SampHold *self) { DELETE_STREAM };
 static PyObject *
 SampHold_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     SampHold *self;
     self = (SampHold *)type->tp_alloc(type, 0);
     
@@ -1242,9 +1233,7 @@ SampHold_init(SampHold *self, PyObject *args, PyObject *kwds)
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
     (*self->mode_func_ptr)(self);
-    
-    SampHold_compute_next_data_frame((SampHold *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -1256,7 +1245,7 @@ static PyObject * SampHold_setAdd(SampHold *self, PyObject *arg) { SET_ADD };
 static PyObject * SampHold_setSub(SampHold *self, PyObject *arg) { SET_SUB };	
 static PyObject * SampHold_setDiv(SampHold *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * SampHold_play(SampHold *self) { PLAY };
+static PyObject * SampHold_play(SampHold *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * SampHold_out(SampHold *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * SampHold_stop(SampHold *self) { STOP };
 
@@ -1318,7 +1307,7 @@ static PyMethodDef SampHold_methods[] = {
 {"getServer", (PyCFunction)SampHold_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)SampHold_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)SampHold_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)SampHold_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)SampHold_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"out", (PyCFunction)SampHold_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)SampHold_stop, METH_NOARGS, "Stops computing."},
 {"setValue", (PyCFunction)SampHold_setValue, METH_O, "Sets trigger value."},
@@ -1422,42 +1411,42 @@ typedef struct {
     Stream *input_stream;
     PyObject *comp;
     Stream *comp_stream;
-    float (*compare_func_ptr)(float, float); // true = 1.0, false = 0.0
+    MYFLT (*compare_func_ptr)(MYFLT, MYFLT); // true = 1.0, false = 0.0
     int modebuffer[3]; // need at least 2 slots for mul & add 
 } Compare;
 
-static float
-Compare_lt(float in, float comp) {
+static MYFLT
+Compare_lt(MYFLT in, MYFLT comp) {
     if (in < comp) { return 1.0; }
     else { return 0.0; }
 }
 
-static float
-Compare_elt(float in, float comp) {
+static MYFLT
+Compare_elt(MYFLT in, MYFLT comp) {
     if (in <= comp) { return 1.0; }
     else { return 0.0; }
 }
 
-static float
-Compare_gt(float in, float comp) {
+static MYFLT
+Compare_gt(MYFLT in, MYFLT comp) {
     if (in > comp) { return 1.0; }
     else { return 0.0; }
 }
 
-static float
-Compare_egt(float in, float comp) {
+static MYFLT
+Compare_egt(MYFLT in, MYFLT comp) {
     if (in >= comp) { return 1.0; }
     else { return 0.0; }
 }
 
-static float
-Compare_eq(float in, float comp) {
+static MYFLT
+Compare_eq(MYFLT in, MYFLT comp) {
     if (in >= (comp - 0.0001) && in <= (comp + 0.0001)) { return 1.0; }
     else { return 0.0; }
 }
 
-static float
-Compare_neq(float in, float comp) {
+static MYFLT
+Compare_neq(MYFLT in, MYFLT comp) {
     if (in <= (comp - 0.0001) || in >= (comp + 0.0001)) { return 1.0; }
     else { return 0.0; }
 }
@@ -1465,8 +1454,8 @@ Compare_neq(float in, float comp) {
 static void
 Compare_process_i(Compare *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float comp = PyFloat_AS_DOUBLE(self->comp);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT comp = PyFloat_AS_DOUBLE(self->comp);
     
     for (i=0; i<self->bufsize; i++) {
         self->data[i] = (*self->compare_func_ptr)(in[i], comp);
@@ -1476,8 +1465,8 @@ Compare_process_i(Compare *self) {
 static void
 Compare_process_a(Compare *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *comp = Stream_getData((Stream *)self->comp_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *comp = Stream_getData((Stream *)self->comp_stream);
     
     for (i=0; i<self->bufsize; i++) {
         self->data[i] = (*self->compare_func_ptr)(in[i], comp[i]);
@@ -1583,6 +1572,7 @@ static PyObject * Compare_deleteStream(Compare *self) { DELETE_STREAM };
 static PyObject *
 Compare_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Compare *self;
     self = (Compare *)type->tp_alloc(type, 0);
     
@@ -1630,9 +1620,7 @@ Compare_init(Compare *self, PyObject *args, PyObject *kwds)
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
     (*self->mode_func_ptr)(self);
-    
-    Compare_compute_next_data_frame((Compare *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -1644,7 +1632,7 @@ static PyObject * Compare_setAdd(Compare *self, PyObject *arg) { SET_ADD };
 static PyObject * Compare_setSub(Compare *self, PyObject *arg) { SET_SUB };	
 static PyObject * Compare_setDiv(Compare *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * Compare_play(Compare *self) { PLAY };
+static PyObject * Compare_play(Compare *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Compare_stop(Compare *self) { STOP };
 
 static PyObject * Compare_multiply(Compare *self, PyObject *arg) { MULTIPLY };
@@ -1733,7 +1721,7 @@ static PyMethodDef Compare_methods[] = {
 {"getServer", (PyCFunction)Compare_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Compare_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Compare_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Compare_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Compare_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)Compare_stop, METH_NOARGS, "Stops computing."},
 {"setComp", (PyCFunction)Compare_setComp, METH_O, "Sets the comparison object."},
 {"setMode", (PyCFunction)Compare_setMode, METH_O, "Sets the comparison mode."},
@@ -1826,4 +1814,736 @@ Compare_members,                                 /* tp_members */
 (initproc)Compare_init,                          /* tp_init */
 0,                                              /* tp_alloc */
 Compare_new,                                     /* tp_new */
+};
+
+/*****************/
+/** Between object **/
+/*****************/
+
+typedef struct {
+    pyo_audio_HEAD
+    PyObject *input;
+    Stream *input_stream;
+    PyObject *min;
+    Stream *min_stream;
+    PyObject *max;
+    Stream *max_stream;
+    int modebuffer[4];
+} Between;
+
+static void
+Between_transform_ii(Between *self) {
+    MYFLT val;
+    int i;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT mi = PyFloat_AS_DOUBLE(self->min);
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    
+    for (i=0; i<self->bufsize; i++) {
+        val = in[i];
+        if(val >= mi && val < ma)
+            self->data[i] = 1.0;
+        else
+            self->data[i] = 0.0;
+    }
+}
+
+static void
+Between_transform_ai(Between *self) {
+    MYFLT val;
+    int i;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *mi = Stream_getData((Stream *)self->min_stream);
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    
+    for (i=0; i<self->bufsize; i++) {
+        val = in[i];
+        if(val >= mi[i] && val < ma)
+            self->data[i] = 1.0;
+        else
+            self->data[i] = 0.0;
+    }
+}
+
+static void
+Between_transform_ia(Between *self) {
+    MYFLT val;
+    int i;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT mi = PyFloat_AS_DOUBLE(self->min);
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
+    
+    for (i=0; i<self->bufsize; i++) {
+        val = in[i];
+        if(val >= mi && val < ma[i])
+            self->data[i] = 1.0;
+        else
+            self->data[i] = 0.0;
+    }
+}
+
+static void
+Between_transform_aa(Between *self) {
+    MYFLT val;
+    int i;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *mi = Stream_getData((Stream *)self->min_stream);
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
+    
+    for (i=0; i<self->bufsize; i++) {
+        val = in[i];
+        if(val >= mi[i] && val < ma[i])
+            self->data[i] = 1.0;
+        else
+            self->data[i] = 0.0;
+    }
+}
+
+static void Between_postprocessing_ii(Between *self) { POST_PROCESSING_II };
+static void Between_postprocessing_ai(Between *self) { POST_PROCESSING_AI };
+static void Between_postprocessing_ia(Between *self) { POST_PROCESSING_IA };
+static void Between_postprocessing_aa(Between *self) { POST_PROCESSING_AA };
+static void Between_postprocessing_ireva(Between *self) { POST_PROCESSING_IREVA };
+static void Between_postprocessing_areva(Between *self) { POST_PROCESSING_AREVA };
+static void Between_postprocessing_revai(Between *self) { POST_PROCESSING_REVAI };
+static void Between_postprocessing_revaa(Between *self) { POST_PROCESSING_REVAA };
+static void Between_postprocessing_revareva(Between *self) { POST_PROCESSING_REVAREVA };
+
+static void
+Between_setProcMode(Between *self)
+{
+    int procmode, muladdmode;
+    procmode = self->modebuffer[2] + self->modebuffer[3] * 10;
+    muladdmode = self->modebuffer[0] + self->modebuffer[1] * 10;
+    
+	switch (procmode) {
+        case 0:    
+            self->proc_func_ptr = Between_transform_ii;
+            break;
+        case 1:    
+            self->proc_func_ptr = Between_transform_ai;
+            break;
+        case 10:        
+            self->proc_func_ptr = Between_transform_ia;
+            break;
+        case 11:    
+            self->proc_func_ptr = Between_transform_aa;
+            break;
+    } 
+	switch (muladdmode) {
+        case 0:        
+            self->muladd_func_ptr = Between_postprocessing_ii;
+            break;
+        case 1:    
+            self->muladd_func_ptr = Between_postprocessing_ai;
+            break;
+        case 2:    
+            self->muladd_func_ptr = Between_postprocessing_revai;
+            break;
+        case 10:        
+            self->muladd_func_ptr = Between_postprocessing_ia;
+            break;
+        case 11:    
+            self->muladd_func_ptr = Between_postprocessing_aa;
+            break;
+        case 12:    
+            self->muladd_func_ptr = Between_postprocessing_revaa;
+            break;
+        case 20:        
+            self->muladd_func_ptr = Between_postprocessing_ireva;
+            break;
+        case 21:    
+            self->muladd_func_ptr = Between_postprocessing_areva;
+            break;
+        case 22:    
+            self->muladd_func_ptr = Between_postprocessing_revareva;
+            break;
+    }   
+}
+
+static void
+Between_compute_next_data_frame(Between *self)
+{
+    (*self->proc_func_ptr)(self); 
+    (*self->muladd_func_ptr)(self);
+    Stream_setData(self->stream, self->data);
+}
+
+static int
+Between_traverse(Between *self, visitproc visit, void *arg)
+{
+    pyo_VISIT
+    Py_VISIT(self->input);
+    Py_VISIT(self->input_stream);    
+    Py_VISIT(self->min);    
+    Py_VISIT(self->min_stream);    
+    Py_VISIT(self->max);    
+    Py_VISIT(self->max_stream);    
+    return 0;
+}
+
+static int 
+Between_clear(Between *self)
+{
+    pyo_CLEAR
+    Py_CLEAR(self->input);
+    Py_CLEAR(self->input_stream);
+    Py_CLEAR(self->min);    
+    Py_CLEAR(self->min_stream);    
+    Py_CLEAR(self->max);    
+    Py_CLEAR(self->max_stream);    
+    return 0;
+}
+
+static void
+Between_dealloc(Between* self)
+{
+    free(self->data);
+    Between_clear(self);
+    self->ob_type->tp_free((PyObject*)self);
+}
+
+static PyObject * Between_deleteStream(Between *self) { DELETE_STREAM };
+
+static PyObject *
+Between_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    int i;
+    Between *self;
+    self = (Between *)type->tp_alloc(type, 0);
+    
+    self->min = PyFloat_FromDouble(0.0);
+    self->max = PyFloat_FromDouble(1.0);
+	self->modebuffer[0] = 0;
+	self->modebuffer[1] = 0;
+	self->modebuffer[2] = 0;
+	self->modebuffer[3] = 0;
+    
+    INIT_OBJECT_COMMON
+    Stream_setFunctionPtr(self->stream, Between_compute_next_data_frame);
+    self->mode_func_ptr = Between_setProcMode;
+    
+    return (PyObject *)self;
+}
+
+static int
+Between_init(Between *self, PyObject *args, PyObject *kwds)
+{
+    PyObject *inputtmp, *input_streamtmp, *mintmp=NULL, *maxtmp=NULL, *multmp=NULL, *addtmp=NULL;
+    
+    static char *kwlist[] = {"input", "min", "max", "mul", "add", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O|OOOO", kwlist, &inputtmp, &mintmp, &maxtmp, &multmp, &addtmp))
+        return -1; 
+    
+    INIT_INPUT_STREAM
+    
+    if (mintmp) {
+        PyObject_CallMethod((PyObject *)self, "setMin", "O", mintmp);
+    }
+    
+    if (maxtmp) {
+        PyObject_CallMethod((PyObject *)self, "setMax", "O", maxtmp);
+    }
+    
+    if (multmp) {
+        PyObject_CallMethod((PyObject *)self, "setMul", "O", multmp);
+    }
+    
+    if (addtmp) {
+        PyObject_CallMethod((PyObject *)self, "setAdd", "O", addtmp);
+    }
+    
+    Py_INCREF(self->stream);
+    PyObject_CallMethod(self->server, "addStream", "O", self->stream);
+    
+    (*self->mode_func_ptr)(self);
+    
+    Py_INCREF(self);
+    return 0;
+}
+
+static PyObject * Between_getServer(Between* self) { GET_SERVER };
+static PyObject * Between_getStream(Between* self) { GET_STREAM };
+static PyObject * Between_setMul(Between *self, PyObject *arg) { SET_MUL };	
+static PyObject * Between_setAdd(Between *self, PyObject *arg) { SET_ADD };	
+static PyObject * Between_setSub(Between *self, PyObject *arg) { SET_SUB };	
+static PyObject * Between_setDiv(Between *self, PyObject *arg) { SET_DIV };	
+
+static PyObject * Between_play(Between *self, PyObject *args, PyObject *kwds) { PLAY };
+static PyObject * Between_out(Between *self, PyObject *args, PyObject *kwds) { OUT };
+static PyObject * Between_stop(Between *self) { STOP };
+
+static PyObject * Between_multiply(Between *self, PyObject *arg) { MULTIPLY };
+static PyObject * Between_inplace_multiply(Between *self, PyObject *arg) { INPLACE_MULTIPLY };
+static PyObject * Between_add(Between *self, PyObject *arg) { ADD };
+static PyObject * Between_inplace_add(Between *self, PyObject *arg) { INPLACE_ADD };
+static PyObject * Between_sub(Between *self, PyObject *arg) { SUB };
+static PyObject * Between_inplace_sub(Between *self, PyObject *arg) { INPLACE_SUB };
+static PyObject * Between_div(Between *self, PyObject *arg) { DIV };
+static PyObject * Between_inplace_div(Between *self, PyObject *arg) { INPLACE_DIV };
+
+static PyObject *
+Between_setMin(Between *self, PyObject *arg)
+{
+	PyObject *tmp, *streamtmp;
+	
+	if (arg == NULL) {
+		Py_INCREF(Py_None);
+		return Py_None;
+	}
+    
+	int isNumber = PyNumber_Check(arg);
+	
+	tmp = arg;
+	Py_INCREF(tmp);
+	Py_DECREF(self->min);
+	if (isNumber == 1) {
+		self->min = PyNumber_Float(tmp);
+        self->modebuffer[2] = 0;
+	}
+	else {
+		self->min = tmp;
+        streamtmp = PyObject_CallMethod((PyObject *)self->min, "_getStream", NULL);
+        Py_INCREF(streamtmp);
+        Py_XDECREF(self->min_stream);
+        self->min_stream = (Stream *)streamtmp;
+		self->modebuffer[2] = 1;
+	}
+    
+    (*self->mode_func_ptr)(self);
+    
+	Py_INCREF(Py_None);
+	return Py_None;
+}	
+
+static PyObject *
+Between_setMax(Between *self, PyObject *arg)
+{
+	PyObject *tmp, *streamtmp;
+	
+	if (arg == NULL) {
+		Py_INCREF(Py_None);
+		return Py_None;
+	}
+    
+	int isNumber = PyNumber_Check(arg);
+	
+	tmp = arg;
+	Py_INCREF(tmp);
+	Py_DECREF(self->max);
+	if (isNumber == 1) {
+		self->max = PyNumber_Float(tmp);
+        self->modebuffer[3] = 0;
+	}
+	else {
+		self->max = tmp;
+        streamtmp = PyObject_CallMethod((PyObject *)self->max, "_getStream", NULL);
+        Py_INCREF(streamtmp);
+        Py_XDECREF(self->max_stream);
+        self->max_stream = (Stream *)streamtmp;
+		self->modebuffer[3] = 1;
+	}
+    
+    (*self->mode_func_ptr)(self);
+    
+	Py_INCREF(Py_None);
+	return Py_None;
+}	
+
+static PyMemberDef Between_members[] = {
+    {"server", T_OBJECT_EX, offsetof(Between, server), 0, "Pyo server."},
+    {"stream", T_OBJECT_EX, offsetof(Between, stream), 0, "Stream object."},
+    {"input", T_OBJECT_EX, offsetof(Between, input), 0, "Input sound object."},
+    {"min", T_OBJECT_EX, offsetof(Between, min), 0, "Minimum possible value."},
+    {"max", T_OBJECT_EX, offsetof(Between, max), 0, "Maximum possible value."},
+    {"mul", T_OBJECT_EX, offsetof(Between, mul), 0, "Mul factor."},
+    {"add", T_OBJECT_EX, offsetof(Between, add), 0, "Add factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyMethodDef Between_methods[] = {
+    {"getServer", (PyCFunction)Between_getServer, METH_NOARGS, "Returns server object."},
+    {"_getStream", (PyCFunction)Between_getStream, METH_NOARGS, "Returns stream object."},
+    {"deleteStream", (PyCFunction)Between_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
+    {"play", (PyCFunction)Between_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
+    {"out", (PyCFunction)Between_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
+    {"stop", (PyCFunction)Between_stop, METH_NOARGS, "Stops computing."},
+    {"setMin", (PyCFunction)Between_setMin, METH_O, "Sets the minimum value."},
+    {"setMax", (PyCFunction)Between_setMax, METH_O, "Sets the maximum value."},
+    {"setMul", (PyCFunction)Between_setMul, METH_O, "Sets oscillator mul factor."},
+    {"setAdd", (PyCFunction)Between_setAdd, METH_O, "Sets oscillator add factor."},
+    {"setSub", (PyCFunction)Between_setSub, METH_O, "Sets inverse add factor."},
+    {"setDiv", (PyCFunction)Between_setDiv, METH_O, "Sets inverse mul factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyNumberMethods Between_as_number = {
+    (binaryfunc)Between_add,                      /*nb_add*/
+    (binaryfunc)Between_sub,                 /*nb_subtract*/
+    (binaryfunc)Between_multiply,                 /*nb_multiply*/
+    (binaryfunc)Between_div,                   /*nb_divide*/
+    0,                /*nb_remainder*/
+    0,                   /*nb_divmod*/
+    0,                   /*nb_power*/
+    0,                  /*nb_neg*/
+    0,                /*nb_pos*/
+    0,                  /*(unaryfunc)array_abs,*/
+    0,                    /*nb_nonzero*/
+    0,                    /*nb_invert*/
+    0,               /*nb_lshift*/
+    0,              /*nb_rshift*/
+    0,              /*nb_and*/
+    0,              /*nb_xor*/
+    0,               /*nb_or*/
+    0,                                          /*nb_coerce*/
+    0,                       /*nb_int*/
+    0,                      /*nb_long*/
+    0,                     /*nb_float*/
+    0,                       /*nb_oct*/
+    0,                       /*nb_hex*/
+    (binaryfunc)Between_inplace_add,              /*inplace_add*/
+    (binaryfunc)Between_inplace_sub,         /*inplace_subtract*/
+    (binaryfunc)Between_inplace_multiply,         /*inplace_multiply*/
+    (binaryfunc)Between_inplace_div,           /*inplace_divide*/
+    0,        /*inplace_remainder*/
+    0,           /*inplace_power*/
+    0,       /*inplace_lshift*/
+    0,      /*inplace_rshift*/
+    0,      /*inplace_and*/
+    0,      /*inplace_xor*/
+    0,       /*inplace_or*/
+    0,             /*nb_floor_divide*/
+    0,              /*nb_true_divide*/
+    0,     /*nb_inplace_floor_divide*/
+    0,      /*nb_inplace_true_divide*/
+    0,                     /* nb_index */
+};
+
+PyTypeObject BetweenType = {
+    PyObject_HEAD_INIT(NULL)
+    0,                         /*ob_size*/
+    "_pyo.Between_base",         /*tp_name*/
+    sizeof(Between),         /*tp_basicsize*/
+    0,                         /*tp_itemsize*/
+    (destructor)Between_dealloc, /*tp_dealloc*/
+    0,                         /*tp_print*/
+    0,                         /*tp_getattr*/
+    0,                         /*tp_setattr*/
+    0,                         /*tp_compare*/
+    0,                         /*tp_repr*/
+    &Between_as_number,             /*tp_as_number*/
+    0,                         /*tp_as_sequence*/
+    0,                         /*tp_as_mapping*/
+    0,                         /*tp_hash */
+    0,                         /*tp_call*/
+    0,                         /*tp_str*/
+    0,                         /*tp_getattro*/
+    0,                         /*tp_setattro*/
+    0,                         /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES, /*tp_flags*/
+    "Between objects. Outputs a trig if signal is between min and max values.",           /* tp_doc */
+    (traverseproc)Between_traverse,   /* tp_traverse */
+    (inquiry)Between_clear,           /* tp_clear */
+    0,		               /* tp_richcompare */
+    0,		               /* tp_weaklistoffset */
+    0,		               /* tp_iter */
+    0,		               /* tp_iternext */
+    Between_methods,             /* tp_methods */
+    Between_members,             /* tp_members */
+    0,                      /* tp_getset */
+    0,                         /* tp_base */
+    0,                         /* tp_dict */
+    0,                         /* tp_descr_get */
+    0,                         /* tp_descr_set */
+    0,                         /* tp_dictoffset */
+    (initproc)Between_init,      /* tp_init */
+    0,                         /* tp_alloc */
+    Between_new,                 /* tp_new */
+};
+
+
+/************/
+/* Denorm */
+/************/
+#ifndef USE_DOUBLE
+#define DENORM_RAND  ((MYFLT) ((rand()/((MYFLT)(RAND_MAX)*0.5+1) - 1.0) * (MYFLT)(1.0e-24)))
+#else
+#define DENORM_RAND  ((MYFLT) ((rand()/((MYFLT)(RAND_MAX)*0.5+1) - 1.0) * (MYFLT)(1.0e-60)))
+#endif
+
+typedef struct {
+    pyo_audio_HEAD
+    PyObject *input;
+    Stream *input_stream;
+    int modebuffer[2]; // need at least 2 slots for mul & add 
+} Denorm;
+
+static void
+Denorm_filters(Denorm *self) {
+    int i;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    
+    for (i=0; i<self->bufsize; i++) {
+        self->data[i] = in[i] + DENORM_RAND;
+    }
+}
+
+static void Denorm_postprocessing_ii(Denorm *self) { POST_PROCESSING_II };
+static void Denorm_postprocessing_ai(Denorm *self) { POST_PROCESSING_AI };
+static void Denorm_postprocessing_ia(Denorm *self) { POST_PROCESSING_IA };
+static void Denorm_postprocessing_aa(Denorm *self) { POST_PROCESSING_AA };
+static void Denorm_postprocessing_ireva(Denorm *self) { POST_PROCESSING_IREVA };
+static void Denorm_postprocessing_areva(Denorm *self) { POST_PROCESSING_AREVA };
+static void Denorm_postprocessing_revai(Denorm *self) { POST_PROCESSING_REVAI };
+static void Denorm_postprocessing_revaa(Denorm *self) { POST_PROCESSING_REVAA };
+static void Denorm_postprocessing_revareva(Denorm *self) { POST_PROCESSING_REVAREVA };
+
+static void
+Denorm_setProcMode(Denorm *self)
+{
+    int muladdmode;
+    muladdmode = self->modebuffer[0] + self->modebuffer[1] * 10;
+    
+    self->proc_func_ptr = Denorm_filters;
+    
+	switch (muladdmode) {
+        case 0:        
+            self->muladd_func_ptr = Denorm_postprocessing_ii;
+            break;
+        case 1:    
+            self->muladd_func_ptr = Denorm_postprocessing_ai;
+            break;
+        case 2:    
+            self->muladd_func_ptr = Denorm_postprocessing_revai;
+            break;
+        case 10:        
+            self->muladd_func_ptr = Denorm_postprocessing_ia;
+            break;
+        case 11:    
+            self->muladd_func_ptr = Denorm_postprocessing_aa;
+            break;
+        case 12:    
+            self->muladd_func_ptr = Denorm_postprocessing_revaa;
+            break;
+        case 20:        
+            self->muladd_func_ptr = Denorm_postprocessing_ireva;
+            break;
+        case 21:    
+            self->muladd_func_ptr = Denorm_postprocessing_areva;
+            break;
+        case 22:    
+            self->muladd_func_ptr = Denorm_postprocessing_revareva;
+            break;
+    }   
+}
+
+static void
+Denorm_compute_next_data_frame(Denorm *self)
+{
+    (*self->proc_func_ptr)(self); 
+    (*self->muladd_func_ptr)(self);
+    Stream_setData(self->stream, self->data);
+}
+
+static int
+Denorm_traverse(Denorm *self, visitproc visit, void *arg)
+{
+    pyo_VISIT
+    Py_VISIT(self->input);
+    Py_VISIT(self->input_stream);
+    return 0;
+}
+
+static int 
+Denorm_clear(Denorm *self)
+{
+    pyo_CLEAR
+    Py_CLEAR(self->input);
+    Py_CLEAR(self->input_stream);
+    return 0;
+}
+
+static void
+Denorm_dealloc(Denorm* self)
+{
+    free(self->data);
+    Denorm_clear(self);
+    self->ob_type->tp_free((PyObject*)self);
+}
+
+static PyObject * Denorm_deleteStream(Denorm *self) { DELETE_STREAM };
+
+static PyObject *
+Denorm_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    int i;
+    Denorm *self;
+    self = (Denorm *)type->tp_alloc(type, 0);
+    
+	self->modebuffer[0] = 0;
+	self->modebuffer[1] = 0;
+    
+    INIT_OBJECT_COMMON
+    Stream_setFunctionPtr(self->stream, Denorm_compute_next_data_frame);
+    self->mode_func_ptr = Denorm_setProcMode;
+    return (PyObject *)self;
+}
+
+static int
+Denorm_init(Denorm *self, PyObject *args, PyObject *kwds)
+{
+    PyObject *inputtmp, *input_streamtmp, *multmp=NULL, *addtmp=NULL;
+    
+    static char *kwlist[] = {"input", "mul", "add", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O|OO", kwlist, &inputtmp, &multmp, &addtmp))
+        return -1; 
+    
+    INIT_INPUT_STREAM
+    
+    if (multmp) {
+        PyObject_CallMethod((PyObject *)self, "setMul", "O", multmp);
+    }
+    
+    if (addtmp) {
+        PyObject_CallMethod((PyObject *)self, "setAdd", "O", addtmp);
+    }
+    
+    Py_INCREF(self->stream);
+    PyObject_CallMethod(self->server, "addStream", "O", self->stream);
+    
+    srand((unsigned)(time(0)));
+
+    (*self->mode_func_ptr)(self);
+    
+    Py_INCREF(self);
+    return 0;
+}
+
+static PyObject * Denorm_getServer(Denorm* self) { GET_SERVER };
+static PyObject * Denorm_getStream(Denorm* self) { GET_STREAM };
+static PyObject * Denorm_setMul(Denorm *self, PyObject *arg) { SET_MUL };	
+static PyObject * Denorm_setAdd(Denorm *self, PyObject *arg) { SET_ADD };	
+static PyObject * Denorm_setSub(Denorm *self, PyObject *arg) { SET_SUB };	
+static PyObject * Denorm_setDiv(Denorm *self, PyObject *arg) { SET_DIV };	
+
+static PyObject * Denorm_play(Denorm *self, PyObject *args, PyObject *kwds) { PLAY };
+static PyObject * Denorm_out(Denorm *self, PyObject *args, PyObject *kwds) { OUT };
+static PyObject * Denorm_stop(Denorm *self) { STOP };
+
+static PyObject * Denorm_multiply(Denorm *self, PyObject *arg) { MULTIPLY };
+static PyObject * Denorm_inplace_multiply(Denorm *self, PyObject *arg) { INPLACE_MULTIPLY };
+static PyObject * Denorm_add(Denorm *self, PyObject *arg) { ADD };
+static PyObject * Denorm_inplace_add(Denorm *self, PyObject *arg) { INPLACE_ADD };
+static PyObject * Denorm_sub(Denorm *self, PyObject *arg) { SUB };
+static PyObject * Denorm_inplace_sub(Denorm *self, PyObject *arg) { INPLACE_SUB };
+static PyObject * Denorm_div(Denorm *self, PyObject *arg) { DIV };
+static PyObject * Denorm_inplace_div(Denorm *self, PyObject *arg) { INPLACE_DIV };
+
+static PyMemberDef Denorm_members[] = {
+    {"server", T_OBJECT_EX, offsetof(Denorm, server), 0, "Pyo server."},
+    {"stream", T_OBJECT_EX, offsetof(Denorm, stream), 0, "Stream object."},
+    {"input", T_OBJECT_EX, offsetof(Denorm, input), 0, "Input sound object."},
+    {"mul", T_OBJECT_EX, offsetof(Denorm, mul), 0, "Mul factor."},
+    {"add", T_OBJECT_EX, offsetof(Denorm, add), 0, "Add factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyMethodDef Denorm_methods[] = {
+    {"getServer", (PyCFunction)Denorm_getServer, METH_NOARGS, "Returns server object."},
+    {"_getStream", (PyCFunction)Denorm_getStream, METH_NOARGS, "Returns stream object."},
+    {"deleteStream", (PyCFunction)Denorm_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
+    {"play", (PyCFunction)Denorm_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
+    {"out", (PyCFunction)Denorm_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
+    {"stop", (PyCFunction)Denorm_stop, METH_NOARGS, "Stops computing."},
+    {"setMul", (PyCFunction)Denorm_setMul, METH_O, "Sets oscillator mul factor."},
+    {"setAdd", (PyCFunction)Denorm_setAdd, METH_O, "Sets oscillator add factor."},
+    {"setSub", (PyCFunction)Denorm_setSub, METH_O, "Sets inverse add factor."},
+    {"setDiv", (PyCFunction)Denorm_setDiv, METH_O, "Sets inverse mul factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyNumberMethods Denorm_as_number = {
+    (binaryfunc)Denorm_add,                         /*nb_add*/
+    (binaryfunc)Denorm_sub,                         /*nb_subtract*/
+    (binaryfunc)Denorm_multiply,                    /*nb_multiply*/
+    (binaryfunc)Denorm_div,                                              /*nb_divide*/
+    0,                                              /*nb_remainder*/
+    0,                                              /*nb_divmod*/
+    0,                                              /*nb_power*/
+    0,                                              /*nb_neg*/
+    0,                                              /*nb_pos*/
+    0,                                              /*(unaryfunc)array_abs,*/
+    0,                                              /*nb_nonzero*/
+    0,                                              /*nb_invert*/
+    0,                                              /*nb_lshift*/
+    0,                                              /*nb_rshift*/
+    0,                                              /*nb_and*/
+    0,                                              /*nb_xor*/
+    0,                                              /*nb_or*/
+    0,                                              /*nb_coerce*/
+    0,                                              /*nb_int*/
+    0,                                              /*nb_long*/
+    0,                                              /*nb_float*/
+    0,                                              /*nb_oct*/
+    0,                                              /*nb_hex*/
+    (binaryfunc)Denorm_inplace_add,                 /*inplace_add*/
+    (binaryfunc)Denorm_inplace_sub,                 /*inplace_subtract*/
+    (binaryfunc)Denorm_inplace_multiply,            /*inplace_multiply*/
+    (binaryfunc)Denorm_inplace_div,                                              /*inplace_divide*/
+    0,                                              /*inplace_remainder*/
+    0,                                              /*inplace_power*/
+    0,                                              /*inplace_lshift*/
+    0,                                              /*inplace_rshift*/
+    0,                                              /*inplace_and*/
+    0,                                              /*inplace_xor*/
+    0,                                              /*inplace_or*/
+    0,                                              /*nb_floor_divide*/
+    0,                                              /*nb_true_divide*/
+    0,                                              /*nb_inplace_floor_divide*/
+    0,                                              /*nb_inplace_true_divide*/
+    0,                                              /* nb_index */
+};
+
+PyTypeObject DenormType = {
+    PyObject_HEAD_INIT(NULL)
+    0,                                              /*ob_size*/
+    "_pyo.Denorm_base",                                   /*tp_name*/
+    sizeof(Denorm),                                 /*tp_basicsize*/
+    0,                                              /*tp_itemsize*/
+    (destructor)Denorm_dealloc,                     /*tp_dealloc*/
+    0,                                              /*tp_print*/
+    0,                                              /*tp_getattr*/
+    0,                                              /*tp_setattr*/
+    0,                                              /*tp_compare*/
+    0,                                              /*tp_repr*/
+    &Denorm_as_number,                              /*tp_as_number*/
+    0,                                              /*tp_as_sequence*/
+    0,                                              /*tp_as_mapping*/
+    0,                                              /*tp_hash */
+    0,                                              /*tp_call*/
+    0,                                              /*tp_str*/
+    0,                                              /*tp_getattro*/
+    0,                                              /*tp_setattro*/
+    0,                                              /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES, /*tp_flags*/
+    "Denorm objects. Mixes low level noise to an input signal.",           /* tp_doc */
+    (traverseproc)Denorm_traverse,                  /* tp_traverse */
+    (inquiry)Denorm_clear,                          /* tp_clear */
+    0,                                              /* tp_richcompare */
+    0,                                              /* tp_weaklistoffset */
+    0,                                              /* tp_iter */
+    0,                                              /* tp_iternext */
+    Denorm_methods,                                 /* tp_methods */
+    Denorm_members,                                 /* tp_members */
+    0,                                              /* tp_getset */
+    0,                                              /* tp_base */
+    0,                                              /* tp_dict */
+    0,                                              /* tp_descr_get */
+    0,                                              /* tp_descr_set */
+    0,                                              /* tp_dictoffset */
+    (initproc)Denorm_init,                          /* tp_init */
+    0,                                              /* tp_alloc */
+    Denorm_new,                                     /* tp_new */
 };

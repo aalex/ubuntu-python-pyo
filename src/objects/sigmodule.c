@@ -84,13 +84,13 @@ Sig_compute_next_data_frame(Sig *self)
 {
     int i;
     if (self->modebuffer[2] == 0) {
-        float val = PyFloat_AS_DOUBLE(self->value);
+        MYFLT val = PyFloat_AS_DOUBLE(self->value);
         for (i=0; i<self->bufsize; i++) {
             self->data[i] = val;
         }
     }
     else {
-        float *vals = Stream_getData((Stream *)self->value_stream);
+        MYFLT *vals = Stream_getData((Stream *)self->value_stream);
         for (i=0; i<self->bufsize; i++) {
             self->data[i] = vals[i];
         }
@@ -130,6 +130,7 @@ static PyObject * Sig_deleteStream(Sig *self) { DELETE_STREAM };
 static PyObject *
 Sig_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Sig *self;
     self = (Sig *)type->tp_alloc(type, 0);
     
@@ -217,7 +218,7 @@ static PyObject * Sig_setAdd(Sig *self, PyObject *arg) { SET_ADD };
 static PyObject * Sig_setSub(Sig *self, PyObject *arg) { SET_SUB };	
 static PyObject * Sig_setDiv(Sig *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * Sig_play(Sig *self) { PLAY };
+static PyObject * Sig_play(Sig *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Sig_stop(Sig *self) { STOP };
 
 static PyObject * Sig_multiply(Sig *self, PyObject *arg) { MULTIPLY };
@@ -232,6 +233,7 @@ static PyObject * Sig_inplace_div(Sig *self, PyObject *arg) { INPLACE_DIV };
 static PyMemberDef Sig_members[] = {
 {"server", T_OBJECT_EX, offsetof(Sig, server), 0, "Pyo server."},
 {"stream", T_OBJECT_EX, offsetof(Sig, stream), 0, "Stream object."},
+{"value", T_OBJECT_EX, offsetof(Sig, value), 0, "Target value."},
 {"mul", T_OBJECT_EX, offsetof(Sig, mul), 0, "Mul factor."},
 {"add", T_OBJECT_EX, offsetof(Sig, add), 0, "Add factor."},
 {NULL}  /* Sentinel */
@@ -241,7 +243,7 @@ static PyMethodDef Sig_methods[] = {
 {"getServer", (PyCFunction)Sig_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Sig_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Sig_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Sig_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Sig_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)Sig_stop, METH_NOARGS, "Stops computing."},
 {"setValue", (PyCFunction)Sig_setValue, METH_O, "Sets Sig value."},
 {"setMul", (PyCFunction)Sig_setMul, METH_O, "Sets Sig mul factor."},
@@ -340,36 +342,62 @@ Sig_new,                 /* tp_new */
 /***************************/
 typedef struct {
     pyo_audio_HEAD
-    float value;
-    float time;
-    float lastValue;
-    float currentValue;
-    int timeStep;
-    float stepVal;
-    int timeCount;
-    int modebuffer[2];
+    PyObject *value;
+    Stream *value_stream;
+    MYFLT time;
+    MYFLT lastValue;
+    MYFLT currentValue;
+    long timeStep;
+    MYFLT stepVal;
+    long timeCount;
+    int modebuffer[3];
 } SigTo;
 
 static void
 SigTo_generates_i(SigTo *self) {
     int i;
+    MYFLT value;
     
-    if (self->value != self->lastValue) {
-        self->timeCount = 0;
-        self->stepVal = (self->value - self->currentValue) / self->timeStep;
-        self->lastValue = self->value;
-    }    
-        
-    for (i=0; i<self->bufsize; i++) {
-        if (self->timeCount == (self->timeStep - 1)) {
-            self->currentValue = self->value;
-            self->timeCount++;
-        }
-        else if (self->timeCount < self->timeStep) {
-            self->currentValue += self->stepVal;
-            self->timeCount++;
+    if (self->modebuffer[2] == 0) {
+        value = PyFloat_AS_DOUBLE(self->value);
+        if (value != self->lastValue) {
+            self->timeCount = 0;
+            self->stepVal = (value - self->currentValue) / self->timeStep;
+            self->lastValue = value;
         }    
-        self->data[i] = self->currentValue;
+        
+        for (i=0; i<self->bufsize; i++) {
+            if (self->timeCount == (self->timeStep - 1)) {
+                self->currentValue = value;
+                self->timeCount++;
+            }
+            else if (self->timeCount < self->timeStep) {
+                self->currentValue += self->stepVal;
+                self->timeCount++;
+            }    
+            self->data[i] = self->currentValue;
+        }
+    }
+    else {
+        MYFLT *vals = Stream_getData((Stream *)self->value_stream);        
+        for (i=0; i<self->bufsize; i++) {
+            value = vals[i];
+            if (value != self->lastValue) {
+                self->timeCount = 0;
+                self->stepVal = (value - self->currentValue) / self->timeStep;
+                self->lastValue = value;
+            }    
+            
+            if (self->timeCount == (self->timeStep - 1)) {
+                self->currentValue = value;
+                self->timeCount++;
+            }
+            else if (self->timeCount < self->timeStep) {
+                self->currentValue += self->stepVal;
+                self->timeCount++;
+            }    
+            self->data[i] = self->currentValue;
+        }
     }
 }
 
@@ -434,6 +462,8 @@ static int
 SigTo_traverse(SigTo *self, visitproc visit, void *arg)
 {
     pyo_VISIT
+    Py_VISIT(self->value);    
+    Py_VISIT(self->value_stream);    
     return 0;
 }
 
@@ -441,6 +471,8 @@ static int
 SigTo_clear(SigTo *self)
 {
     pyo_CLEAR
+    Py_CLEAR(self->value);    
+    Py_CLEAR(self->value_stream);    
     return 0;
 }
 
@@ -457,15 +489,18 @@ static PyObject * SigTo_deleteStream(SigTo *self) { DELETE_STREAM };
 static PyObject *
 SigTo_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     SigTo *self;
     self = (SigTo *)type->tp_alloc(type, 0);
 
+    self->value = PyFloat_FromDouble(0.0);
     self->time = 0.025;
-    self->timeStep = (int)(self->time * self->sr);
+    self->timeStep = (long)(self->time * self->sr);
     self->timeCount = 0;
     self->stepVal = 0.0;
 	self->modebuffer[0] = 0;
 	self->modebuffer[1] = 0;
+	self->modebuffer[2] = 0;
     
     INIT_OBJECT_COMMON
     Stream_setFunctionPtr(self->stream, SigTo_compute_next_data_frame);
@@ -478,12 +513,12 @@ static int
 SigTo_init(SigTo *self, PyObject *args, PyObject *kwds)
 {
     int i;
-    float inittmp = 0.0;
+    MYFLT inittmp = 0.0;
     PyObject *valuetmp=NULL, *timetmp=NULL, *multmp=NULL, *addtmp=NULL;
     
     static char *kwlist[] = {"value", "time", "init", "mul", "add", NULL};
     
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O|OfOO", kwlist, &valuetmp, &timetmp, &inittmp, &multmp, &addtmp))
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, TYPE_O_OFOO, kwlist, &valuetmp, &timetmp, &inittmp, &multmp, &addtmp))
         return -1; 
     
     if (valuetmp) {
@@ -512,9 +547,7 @@ SigTo_init(SigTo *self, PyObject *args, PyObject *kwds)
     for(i=0; i>self->bufsize; i++) {
         self->data[i] = self->currentValue;
     }
-    
-    SigTo_compute_next_data_frame((SigTo *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -522,7 +555,7 @@ SigTo_init(SigTo *self, PyObject *args, PyObject *kwds)
 static PyObject *
 SigTo_setValue(SigTo *self, PyObject *arg)
 {
-	PyObject *tmp;
+	PyObject *tmp, *streamtmp;
 	
 	if (arg == NULL) {
 		Py_INCREF(Py_None);
@@ -533,10 +566,19 @@ SigTo_setValue(SigTo *self, PyObject *arg)
 	
 	tmp = arg;
 	Py_INCREF(tmp);
-	if (isNumber == 1)
-		self->value = PyFloat_AsDouble(PyNumber_Float(tmp));
-    else
-        self->value = self->lastValue;
+    Py_DECREF(self->value);
+	if (isNumber == 1) {
+		self->value = PyNumber_Float(tmp);
+        self->modebuffer[2] = 0;
+    }
+    else {
+		self->value = tmp;
+        streamtmp = PyObject_CallMethod((PyObject *)self->value, "_getStream", NULL);
+        Py_INCREF(streamtmp);
+        Py_XDECREF(self->value_stream);
+        self->value_stream = (Stream *)streamtmp;
+        self->modebuffer[2] = 1;
+    }
     
 	Py_INCREF(Py_None);
 	return Py_None;
@@ -558,7 +600,7 @@ SigTo_setTime(SigTo *self, PyObject *arg)
 	Py_INCREF(tmp);
 	if (isNumber == 1) {
 		self->time = PyFloat_AS_DOUBLE(PyNumber_Float(tmp));
-        self->timeStep = (int)(self->time * self->sr);
+        self->timeStep = (long)(self->time * self->sr);
 	}
     
 	Py_INCREF(Py_None);
@@ -572,7 +614,7 @@ static PyObject * SigTo_setAdd(SigTo *self, PyObject *arg) { SET_ADD };
 static PyObject * SigTo_setSub(SigTo *self, PyObject *arg) { SET_SUB };	
 static PyObject * SigTo_setDiv(SigTo *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * SigTo_play(SigTo *self) { PLAY };
+static PyObject * SigTo_play(SigTo *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * SigTo_stop(SigTo *self) { STOP };
 
 static PyObject * SigTo_multiply(SigTo *self, PyObject *arg) { MULTIPLY };
@@ -587,6 +629,7 @@ static PyObject * SigTo_inplace_div(SigTo *self, PyObject *arg) { INPLACE_DIV };
 static PyMemberDef SigTo_members[] = {
 {"server", T_OBJECT_EX, offsetof(SigTo, server), 0, "Pyo server."},
 {"stream", T_OBJECT_EX, offsetof(SigTo, stream), 0, "Stream object."},
+{"value", T_OBJECT_EX, offsetof(SigTo, value), 0, "Target value."},
 {"mul", T_OBJECT_EX, offsetof(SigTo, mul), 0, "Mul factor."},
 {"add", T_OBJECT_EX, offsetof(SigTo, add), 0, "Add factor."},
 {NULL}  /* Sentinel */
@@ -596,7 +639,7 @@ static PyMethodDef SigTo_methods[] = {
 {"getServer", (PyCFunction)SigTo_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)SigTo_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)SigTo_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)SigTo_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)SigTo_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)SigTo_stop, METH_NOARGS, "Stops computing."},
 {"setValue", (PyCFunction)SigTo_setValue, METH_O, "Sets SigTo value."},
 {"setTime", (PyCFunction)SigTo_setTime, METH_O, "Sets ramp time in seconds."},
@@ -698,17 +741,17 @@ typedef struct {
     pyo_audio_HEAD
     PyObject *callable;
     PyObject *arg;
-    float value;
-    float time;
-    float lastValue;
-    float currentValue;
-    int timeStep;
-    int timeout;
-    float stepVal;
-    int timeCount;
+    MYFLT value;
+    MYFLT time;
+    MYFLT lastValue;
+    MYFLT currentValue;
+    long timeStep;
+    long timeout;
+    MYFLT stepVal;
+    long timeCount;
     int modebuffer[2];
-    float y1;
-    float factor;
+    MYFLT y1;
+    MYFLT factor;
     int flag;
 } VarPort;
 
@@ -838,12 +881,13 @@ static PyObject * VarPort_deleteStream(VarPort *self) { DELETE_STREAM };
 static PyObject *
 VarPort_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     VarPort *self;
     self = (VarPort *)type->tp_alloc(type, 0);
     
     self->time = 0.025;
-    self->timeStep = (int)(self->time * self->sr);
-    self->timeout = (int)((self->time + 0.1) * self->sr);
+    self->timeStep = (long)(self->time * self->sr);
+    self->timeout = (long)((self->time + 0.1) * self->sr);
     self->timeCount = 0;
     self->stepVal = 0.0;
 	self->modebuffer[0] = 0;
@@ -865,12 +909,12 @@ static int
 VarPort_init(VarPort *self, PyObject *args, PyObject *kwds)
 {
     int i;
-    float inittmp = 0.0;
+    MYFLT inittmp = 0.0;
     PyObject *valuetmp=NULL, *timetmp=NULL, *calltmp=NULL, *argtmp=NULL, *multmp=NULL, *addtmp=NULL;
     
     static char *kwlist[] = {"value", "time", "init", "callable", "arg", "mul", "add", NULL};
     
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O|OfOOOO", kwlist, &valuetmp, &timetmp, &inittmp, &calltmp, &argtmp, &multmp, &addtmp))
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, TYPE_O_OFOOOO, kwlist, &valuetmp, &timetmp, &inittmp, &calltmp, &argtmp, &multmp, &addtmp))
         return -1; 
     
     if (valuetmp) {
@@ -911,9 +955,7 @@ VarPort_init(VarPort *self, PyObject *args, PyObject *kwds)
     for(i=0; i>self->bufsize; i++) {
         self->data[i] = self->currentValue;
     }
-    
-    VarPort_compute_next_data_frame((VarPort *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -957,8 +999,8 @@ VarPort_setTime(VarPort *self, PyObject *arg)
 	Py_INCREF(tmp);
 	if (isNumber == 1) {
 		self->time = PyFloat_AS_DOUBLE(PyNumber_Float(tmp));
-        self->timeStep = (int)(self->time * self->sr);
-        self->timeout = (int)((self->time + 0.1) * self->sr);
+        self->timeStep = (long)(self->time * self->sr);
+        self->timeout = (long)((self->time + 0.1) * self->sr);
 	}
     
 	Py_INCREF(Py_None);
@@ -972,7 +1014,7 @@ static PyObject * VarPort_setAdd(VarPort *self, PyObject *arg) { SET_ADD };
 static PyObject * VarPort_setSub(VarPort *self, PyObject *arg) { SET_SUB };	
 static PyObject * VarPort_setDiv(VarPort *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * VarPort_play(VarPort *self) { PLAY };
+static PyObject * VarPort_play(VarPort *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * VarPort_stop(VarPort *self) { STOP };
 
 static PyObject * VarPort_multiply(VarPort *self, PyObject *arg) { MULTIPLY };
@@ -996,7 +1038,7 @@ static PyMethodDef VarPort_methods[] = {
     {"getServer", (PyCFunction)VarPort_getServer, METH_NOARGS, "Returns server object."},
     {"_getStream", (PyCFunction)VarPort_getStream, METH_NOARGS, "Returns stream object."},
     {"deleteStream", (PyCFunction)VarPort_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-    {"play", (PyCFunction)VarPort_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+    {"play", (PyCFunction)VarPort_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
     {"stop", (PyCFunction)VarPort_stop, METH_NOARGS, "Stops computing."},
     {"setValue", (PyCFunction)VarPort_setValue, METH_O, "Sets VarPort value."},
     {"setTime", (PyCFunction)VarPort_setTime, METH_O, "Sets ramp time in seconds."},
