@@ -1,3 +1,9 @@
+python-pyo (0.4.1-1~natty~ppa1) natty; urgency=low
+
+  * Package for natty
+
+ -- Alexandre Quessy <alexandre@quessy.net>  Wed, 10 Aug 2011 14:02:27 -0400
+
 python-pyo (0.4.1-1~maverick~ppa1) maverick; urgency=low
 
   * Package for maverick
