@@ -1,3 +1,9 @@
+python-pyo (0.4.1-1~lucid~ppa1) lucid; urgency=low
+
+  * New upstream release.
+
+ -- Alexandre Quessy <alexandre@quessy.net>  Wed, 10 Aug 2011 12:23:03 -0400
+
 python-pyo (0.01-3) lucid; urgency=low
 
   * Fixed wrong architecture so that it builds for AMD64 too.
