@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Copyright 2010 Olivier Belanger
 
@@ -49,6 +50,11 @@ class Server(object):
     duplex : int {0, 1}, optional
         Input - output mode. 0 is output only and 1 is both ways. 
         Defaults to 1.
+    audio : string {'portaudio', 'pa', 'jack', 'coreaudio', 'offline'}, optional
+        Audio backend to use. 'pa' is equivalent to 'portaudio'.
+        Default is 'portaudio'.
+    jackname : string, optional
+        Name of jack client. Defaults to 'pyo'
 
     Methods:
 
@@ -56,8 +62,11 @@ class Server(object):
     boot() : Boot the server. Must be called before defining any signal 
         processing chain.
     shutdown() : Shut down and clear the server.
+    setStartOffset(x) : Set the starting time of the real-time processing.
     start() : Start the audio callback loop.
     stop() : Stop the audio callback loop.
+    gui(locals, meter, timer) : Show the server's user interface.
+    recordOptions(dur, filename, fileformat, sampletype) : Rendering settings.
     recstart(str) : Begins recording of the sound sent to output. 
         This method creates a file called `pyo_rec.aif` in the 
         user's home directory if a path is not supplied.
@@ -77,11 +86,17 @@ class Server(object):
     setBufferSize(x) : Set the buffer size used by the server.
     setNchnls(x) : Set the number of channels used by the server.
     setDuplex(x) : Set the duplex mode used by the server.
-
+    setVerbosity(x) : Set the server's verbosity.
+    reinit(sr, nchnls, buffersize, duplex, audio, jackname) : Reinit the server's settings.
+        
     Attributes:
     
     amp : Overall amplitude of the Server. This value is applied on any 
         stream sent to the soundcard.
+    verbosity : Control the messages printed by the server. It is a sum of 
+        values to display different levels: 1 = error, 2 = message, 
+        4 = warning , 8 = debug.
+    startoffset : Starting time of the real-time processing.    
         
     Examples:
     
@@ -91,17 +106,69 @@ class Server(object):
     >>> s.start()
         
     """
-    def __init__(self, sr=44100, nchnls=2, buffersize=256, duplex=1):
+    def __init__(self, sr=44100, nchnls=2, buffersize=256, duplex=1, audio='portaudio', jackname='pyo'):
         self._nchnls = nchnls
         self._amp = 1.
-        self._server = Server_base(sr, nchnls, buffersize, duplex)
+        self._verbosity = 7
+        self._startoffset = 0
+        self._dur = -1
+        self._filename = None
+        self._fileformat = 0
+        self._sampletype = 0
+        self._server = Server_base(sr, nchnls, buffersize, duplex, audio, jackname)
 
-    def gui(self, locals=None):
+    def reinit(self, sr=44100, nchnls=2, buffersize=256, duplex=1, audio='portaudio', jackname='pyo'):
+        """
+        Reinit the server'settings. Useful to alternate between real-time and offline server.
+        
+        Parameters:
+        
+        Same as in the __init__ method.
+        
+        """
+        self._nchnls = nchnls
+        self._amp = 1.
+        self._verbosity = 7
+        self._startoffset = 0
+        self._dur = -1
+        self._filename = None
+        self._fileformat = 0
+        self._sampletype = 0
+        self._server.__init__(sr, nchnls, buffersize, duplex, audio, jackname)
+
+    def gui(self, locals=None, meter=True, timer=True):
+        """
+        Show the server's user interface.
+        
+        Parameters:
+        
+        locals : locals namespace {locals(), None}, optional
+            If locals() is given, the interface will show an interpreter extension,
+            giving a way to interact with the running script. Defaults to None.
+        meter : boolean, optinal
+            If True, the interface will show a vumeter of the global output signal. 
+            Defaults to True.
+        timer : boolean, optional
+            If True, the interface will show a clock of the current time.
+            Defaults to True.
+            
+        """
         f, win = createServerGUI(self._nchnls, self.start, self.stop, self.recstart, self.recstop,
-                                 self.setAmp, self.getIsStarted(), locals, self.shutdown)
-        self._server.setAmpCallable(f)
-        win.mainloop()
+                                 self.setAmp, self.getIsStarted(), locals, self.shutdown, meter, timer, self._amp)
+        if meter:
+            self._server.setAmpCallable(f)
+        if timer:
+            self._server.setTimeCallable(f)
+        try:
+            win.mainloop()
+        except:
+            if win != None:
+                win.MainLoop()
 
+    def setTimeCallable(self, func):
+        self.setTime = func
+        self._server.setTimeCallable(self)
+        
     def setInOutDevice(self, x):
         """
         Set both input and output audio devices. See `pa_list_devices()`.
@@ -161,7 +228,7 @@ class Server(object):
 
         """  
         self._server.setSamplingRate(x)
-
+        
     def setBufferSize(self, x):
         """
         Set the buffer size used by the server.
@@ -198,6 +265,33 @@ class Server(object):
 
         """        
         self._server.setDuplex(x)
+
+    def setVerbosity(self, x):
+        """
+        Set the server's verbosity.
+        
+        Parameters:
+
+        x : int
+            A sum of values to display different levels: 1 = error, 2 = message, 
+            4 = warning , 8 = debug.
+        """        
+        self._verbosity = x
+        self._server.setVerbosity(x)
+
+    def setStartOffset(self, x):
+        """
+        Set the server's starting time offset. First `x` seconds will be rendered
+        offline as fast as possible.
+
+        Parameters:
+
+        x : float
+            Starting time of the real-time processing.
+            
+        """        
+        self._startoffset = x
+        self._server.setStartOffset(x)
 
     def setAmp(self, x):
         """
@@ -245,12 +339,63 @@ class Server(object):
         
         """
         self._server.stop()
+
+    def recordOptions(self, dur=-1, filename=None, fileformat=0, sampletype=0):
+        """
+        Sets options for soundfile created by offline rendering or global recording.
+
+        Parameters:
+
+        dur : float
+            Duration, in seconds, of the recorded file. Only used by
+            offline rendering. Must be positive. Defaults to -1.
+        filename : string
+            Full path of the file to create. If None, a file called
+            `pyo_rec.wav` will be created in the user's home directory.
+            Defaults to None.
+        fileformat : int, optional
+            Format type of the audio file. This function will first try to
+            set the format from the filename extension. If it's not possible,
+            it uses the fileformat parameter. Defaults to 0. 
+            Supported formats are:
+                0 : WAV - Microsoft WAV format (little endian) {.wav, .wave}
+                1 : AIFF - Apple/SGI AIFF format (big endian) {.aif, .aiff}
+        sampletype : int, optional
+            Bit depth encoding of the audio file. Defaults to 0.
+            Supported types are:
+                0 : 16 bits int
+                1 : 24 bits int
+                2 : 32 bits int
+                3 : 32 bits float
+                4 : 64 bits float
+
+        """
+        
+        FORMATS = {'wav': 0, 'wave': 0, 'aif': 1, 'aiff': 1}
+        self._dur = dur
+        if filename == None:
+            filename = os.path.join(os.path.expanduser("~"), "pyo_rec.wav")
+        self._filename = filename
+        ext = filename.rsplit('.')
+        if len(ext) >= 2:
+            ext = ext[-1].lower()
+            if FORMATS.has_key(ext):
+                fileformat = FORMATS[ext]
+            else:
+                print 'Warning: Unknown file extension. Using fileformat value.'
+        else:
+            print 'Warning: Filename has no extension. Using fileformat value.'
+        self._fileformat = fileformat
+        self._sampletype = sampletype
+        self._server.recordOptions(dur, filename, fileformat, sampletype)
         
     def recstart(self, filename=None):
         """
         Begins a default recording of the sound that is sent to the
-        soundcard. This will create a file called `pyo_rec.aif` in 
-        the user's home directory if no path is supplied.
+        soundcard. This will create a file called `pyo_rec.wav` in 
+        the user's home directory if no path is supplied or defined
+        with recordOptions method. Uses file format and sample type 
+        defined with recordOptions method. 
         
         Parameters:
         
@@ -258,8 +403,21 @@ class Server(object):
             Name of the file to be created. Defaults to None.
         
         """
+        FORMATS = {'wav': 0, 'wave': 0, 'aif': 1, 'aiff': 1}
         if filename == None:
-            filename = os.path.join(os.path.expanduser("~"), "pyo_rec.aif")
+            if self._filename != None:
+                filename = self._filename
+            else:
+                filename = os.path.join(os.path.expanduser("~"), "pyo_rec.wav")
+        ext = filename.rsplit('.')
+        if len(ext) >= 2:
+            ext = ext[-1].lower()
+            if FORMATS.has_key(ext):
+                fileformat = FORMATS[ext]
+                if fileformat != self._fileformat:
+                    self._fileformat = fileformat
+                    self._server.recordOptions(self._dur, filename, self._fileformat, self._sampletype)
+
         self._server.recstart(filename)    
         
     def recstop(self):
@@ -310,3 +468,21 @@ class Server(object):
         return self._amp
     @amp.setter
     def amp(self, x): self.setAmp(x) 
+
+    @property
+    def startoffset(self):
+        """float. Starting time of the real-time processing.""" 
+        return self._startoffset
+    @startoffset.setter
+    def startoffset(self, x): self.setStartOffset(x) 
+
+    @property
+    def verbosity(self):
+        """int. Server verbosity.""" 
+        return self._verbosity
+    @verbosity.setter
+    def verbosity(self, x):
+        if (type(x) == int):
+            self.setVerbosity(x)
+        else:
+            raise Exception("verbosity must be an integer")

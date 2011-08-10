@@ -30,6 +30,8 @@ along with pyo.  If not, see <http://www.gnu.org/licenses/>.
 """
 from _core import *
 from _maps import *
+from _widgets import createGraphWindow
+from types import ListType
 
 ######################################################################
 ### Controls
@@ -98,11 +100,8 @@ class Fader(PyoObject):
     def __dir__(self):
         return ['fadein', 'fadeout', 'dur', 'mul', 'add']
 
-    def out(self, chnl=0, inc=1):
-        """
-        Bypassed. Can't be sent to audio outs.
-        """
-        pass
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        return self
 
     def setFadein(self, x):
         """
@@ -146,9 +145,9 @@ class Fader(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setDur(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def fadein(self):
@@ -258,11 +257,8 @@ class Adsr(PyoObject):
     def __dir__(self):
         return ['attack', 'decay', 'sustain', 'release', 'dur', 'mul', 'add']
 
-    def out(self, chnl=0, inc=1):
-        """
-        Bypassed. Can't be sent to audio outs.
-        """
-        pass
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        return self
 
     def setAttack(self, x):
         """
@@ -316,7 +312,7 @@ class Adsr(PyoObject):
             new `sustain` attribute.
         
         """
-        self._sustain = x
+        self._release = x
         x, lmax = convertArgsToLists(x)
         [obj.setRelease(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
@@ -334,9 +330,9 @@ class Adsr(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setDur(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def attack(self):
@@ -390,11 +386,17 @@ class Linseg(PyoObject):
         and must be in increasing order.
     loop : boolean, optional
         Looping mode. Defaults to False.
+    initToFirstVal : boolean, optional
+        If True, audio buffer will be filled at initialization with the
+        starting value of the line. Defaults to False.
         
     Methods:
 
     setList(x) : Replace the `list` attribute.
+    replace(x) : Alias for `setList` method.
     setLoop(x) : Replace the `loop` attribute.
+    graph(xlen, yrange, title, wxnoserver) : Opens a grapher window 
+        to control the shape of the envelope.
 
     Attributes:
     
@@ -415,20 +417,25 @@ class Linseg(PyoObject):
     >>> l.play()
     
     """
-    def __init__(self, list, loop=False, mul=1, add=0):
+    def __init__(self, list, loop=False, initToFirstVal=False, mul=1, add=0):
         PyoObject.__init__(self)
         self._list = list
         self._loop = loop
         self._mul = mul
         self._add = add
-        loop, mul, add, lmax = convertArgsToLists(loop, mul, add)
-        self._base_objs = [Linseg_base(list, wrap(loop,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
+        initToFirstVal, loop, mul, add, lmax = convertArgsToLists(initToFirstVal, loop, mul, add)
+        if type(list[0]) != ListType:
+            self._base_objs = [Linseg_base(list, wrap(loop,i), wrap(initToFirstVal,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
+        else:
+            listlen = len(list)
+            lmax = max(listlen, lmax)
+            self._base_objs = [Linseg_base(wrap(list,i), wrap(loop,i), wrap(initToFirstVal,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
 
     def __dir__(self):
         return ['list', 'loop', 'mul', 'add']
 
-    def out(self, chnl=0, inc=1):
-        pass
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        return self
 
     def setList(self, x):
         """
@@ -441,7 +448,25 @@ class Linseg(PyoObject):
         
         """
         self._list = x
-        [obj.setList(x) for i, obj in enumerate(self._base_objs)]
+        if type(x[0]) != ListType:
+            [obj.setList(x) for i, obj in enumerate(self._base_objs)]
+        else:
+            [obj.setList(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def replace(self, x):
+        """
+        Alias for `setList` method.
+
+        Parameters:
+
+        x : list of tuples
+            new `list` attribute.
+        
+        """
+        self.setList(x)
+
+    def getPoints(self):
+        return self._list
 
     def setLoop(self, x):
         """
@@ -457,9 +482,52 @@ class Linseg(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setLoop(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    def graph(self, xlen=None, yrange=None, title=None, wxnoserver=False):
+        """
+        Opens a grapher window to control the shape of the envelope.
+
+        When editing the grapher with the mouse, the new set of points
+        will be send to the object on mouse up. 
+
+        Ctrl+C with focus on the grapher will copy the list of points to the 
+        clipboard, giving an easy way to insert the new shape in a script.
+
+        Parameters:
+
+        xlen : float, optional
+            Set the maximum value of the X axis of the graph. If None, the
+            maximum value is retrieve from the current list of points.
+            Defaults to None.
+        yrange : tuple, optional
+            Set the min and max values of the Y axis of the graph. If
+            None, min and max are retrieve from the current list of points.
+            Defaults to None.
+        title : string, optional
+            Title of the window. If none is provided, the name of the 
+            class is used.
+        wxnoserver : boolean, optional
+            With wxPython graphical toolkit, if True, tells the 
+            interpreter that there will be no server window and not 
+            to wait for it before showing the controller window. 
+            Defaults to False.
+
+        """
+        if xlen == None:
+            xlen = float(self._list[-1][0])
+        else:
+            xlen = float(xlen)
+        if yrange == None:
+            ymin = float(min([x[1] for x in self._list]))
+            ymax = float(max([x[1] for x in self._list]))
+            if ymin == ymax:
+                yrange = (0, ymax)
+            else:
+                yrange = (ymin, ymax)
+        createGraphWindow(self, 0, xlen, yrange, title, wxnoserver)
 
     @property
     def list(self):
@@ -498,13 +566,19 @@ class Expseg(PyoObject):
     inverse : boolean, optional
         If True, downward slope will be inversed. Useful to create 
         biexponential curves. Defaults to True.
+    initToFirstVal : boolean, optional
+        If True, audio buffer will be filled at initialization with the
+        starting value of the line. Defaults to False.
 
     Methods:
 
     setList(x) : Replace the `list` attribute.
+    replace(x) : Alias for `setList` method.
     setLoop(x) : Replace the `loop` attribute.
     setExp(x) : Replace the `exp` attribute.
     setInverse(x) : Replace the `inverse` attribute.
+    graph(xlen, yrange, title, wxnoserver) : Opens a grapher window 
+        to control the shape of the envelope.
 
     Attributes:
 
@@ -527,7 +601,7 @@ class Expseg(PyoObject):
     >>> l.play()
 
     """
-    def __init__(self, list, loop=False, exp=10, inverse=True, mul=1, add=0):
+    def __init__(self, list, loop=False, exp=10, inverse=True, initToFirstVal=False, mul=1, add=0):
         PyoObject.__init__(self)
         self._list = list
         self._loop = loop
@@ -535,14 +609,19 @@ class Expseg(PyoObject):
         self._inverse = inverse
         self._mul = mul
         self._add = add
-        loop, exp, inverse, mul, add, lmax = convertArgsToLists(loop, exp, inverse, mul, add)
-        self._base_objs = [Expseg_base(list, wrap(loop,i), wrap(exp,i), wrap(inverse,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
+        loop, exp, inverse, initToFirstVal, mul, add, lmax = convertArgsToLists(loop, exp, inverse, initToFirstVal, mul, add)
+        if type(list[0]) != ListType:
+            self._base_objs = [Expseg_base(list, wrap(loop,i), wrap(exp,i), wrap(inverse,i), wrap(initToFirstVal,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
+        else:
+            listlen = len(list)
+            lmax = max(listlen, lmax)
+            self._base_objs = [Expseg_base(wrap(list,i), wrap(loop,i), wrap(exp,i), wrap(inverse,i), wrap(initToFirstVal,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
 
     def __dir__(self):
         return ['list', 'loop', 'exp', 'inverse', 'mul', 'add']
 
-    def out(self, chnl=0, inc=1):
-        pass
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        return self
 
     def setList(self, x):
         """
@@ -555,7 +634,10 @@ class Expseg(PyoObject):
 
         """
         self._list = x
-        [obj.setList(x) for i, obj in enumerate(self._base_objs)]
+        if type(x[0]) != ListType:
+            [obj.setList(x) for i, obj in enumerate(self._base_objs)]
+        else:
+            [obj.setList(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
     def setLoop(self, x):
         """
@@ -599,9 +681,67 @@ class Expseg(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setInverse(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def replace(self, x):
+        """
+        Alias for `setList` method.
+
+        Parameters:
+
+        x : list of tuples
+            new `list` attribute.
+
+        """
+        self.setList(x)
+
+    def getPoints(self):
+        return self._list
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    def graph(self, xlen=None, yrange=None, title=None, wxnoserver=False):
+        """
+        Opens a grapher window to control the shape of the envelope.
+
+        When editing the grapher with the mouse, the new set of points
+        will be send to the object on mouse up. 
+
+        Ctrl+C with focus on the grapher will copy the list of points to the 
+        clipboard, giving an easy way to insert the new shape in a script.
+
+        Parameters:
+
+        xlen : float, optional
+            Set the maximum value of the X axis of the graph. If None, the
+            maximum value is retrieve from the current list of points.
+            Defaults to None.
+        yrange : tuple, optional
+            Set the min and max values of the Y axis of the graph. If
+            None, min and max are retrieve from the current list of points.
+            Defaults to None.
+        title : string, optional
+            Title of the window. If none is provided, the name of the 
+            class is used.
+        wxnoserver : boolean, optional
+            With wxPython graphical toolkit, if True, tells the 
+            interpreter that there will be no server window and not 
+            to wait for it before showing the controller window. 
+            Defaults to False.
+
+        """
+        if xlen == None:
+            xlen = float(self._list[-1][0])
+        else:
+            xlen = float(xlen)
+        if yrange == None:
+            ymin = float(min([x[1] for x in self._list]))
+            ymax = float(max([x[1] for x in self._list]))
+            if ymin == ymax:
+                yrange = (0, ymax)
+            else:
+                yrange = (ymin, ymax)
+        createGraphWindow(self, 2, xlen, yrange, title, wxnoserver)
 
     @property
     def list(self):
@@ -635,14 +775,15 @@ class SigTo(PyoObject):
     """
     Convert numeric value to PyoObject signal with portamento.
     
-    When `value` attribute is changed, a ramp is applied from the
-    current value to the new value.
+    When `value` is changed, a ramp is applied from the current 
+    value to the new value. Can be used with PyoObject to apply
+    a linear portamento on an audio signal.
     
     Parent class: PyoObject
 
     Parameters:
 
-    value : float
+    value : float or PyoObject
         Numerical value to convert.
     time : float, optional
         Ramp time, in seconds, to reach the new value. Defaults to 0.025.
@@ -656,7 +797,7 @@ class SigTo(PyoObject):
     
     Attributes:
     
-    value : float. Numerical value to convert.
+    value : float or PyoObject. Numerical value to convert.
     time : float. Ramp time.
     
     Notes:
@@ -690,7 +831,7 @@ class SigTo(PyoObject):
 
         Parameters:
 
-        x : float
+        x : float or PyoObject
             Numerical value to convert.
 
         """
@@ -710,13 +851,13 @@ class SigTo(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setTime(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
     
     @property
     def value(self):
-        """float. Numerical value to convert.""" 
+        """float or PyoObject. Numerical value to convert.""" 
         return self._value
     @value.setter
     def value(self, x): self.setValue(x)    

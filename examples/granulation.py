@@ -5,6 +5,7 @@
 Classic granulation stretching...
 
 """
+
 from pyo import *
 s = Server(buffersize=512).boot()
 

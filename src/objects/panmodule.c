@@ -36,11 +36,11 @@ typedef struct {
     Stream *spread_stream;
     int chnls;
     int modebuffer[2];
-    float *buffer_streams;
+    MYFLT *buffer_streams;
 } Panner;
 
-static float
-P_clip(float p) {
+static MYFLT
+P_clip(MYFLT p) {
     if (p < 0.0)
         return 0.0;
     else if (p > 1.0)
@@ -51,59 +51,59 @@ P_clip(float p) {
 
 static void
 Panner_splitter_st_i(Panner *self) {
-    float val, inval;
+    MYFLT val, inval;
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
-    float pan = PyFloat_AS_DOUBLE(self->pan);
+    MYFLT pan = PyFloat_AS_DOUBLE(self->pan);
     pan = P_clip(pan);
     
     for (i=0; i<self->bufsize; i++) {
         inval = in[i];
-        val = inval * sqrtf(1.0 - pan);
+        val = inval * MYSQRT(1.0 - pan);
         self->buffer_streams[i] = val;
-        val = inval * sqrtf(pan);
+        val = inval * MYSQRT(pan);
         self->buffer_streams[i+self->bufsize] = val;
     }    
 }
 
 static void
 Panner_splitter_st_a(Panner *self) {
-    float val, inval, panval;
+    MYFLT val, inval, panval;
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
-    float *pan = Stream_getData((Stream *)self->pan_stream);
+    MYFLT *pan = Stream_getData((Stream *)self->pan_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inval = in[i];
         panval = P_clip(pan[i]);
-        val = inval * sqrtf(1.0 - panval);
+        val = inval * MYSQRT(1.0 - panval);
         self->buffer_streams[i] = val;
-        val = inval * sqrtf(panval);
+        val = inval * MYSQRT(panval);
         self->buffer_streams[i+self->bufsize] = val;
     }    
 }
 
 static void
 Panner_splitter_ii(Panner *self) {
-    float val, inval, phase, sprd;
+    MYFLT val, inval, phase, sprd;
     int j, i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
 
-    float pan = PyFloat_AS_DOUBLE(self->pan);
-    float spd = PyFloat_AS_DOUBLE(self->spread);
+    MYFLT pan = PyFloat_AS_DOUBLE(self->pan);
+    MYFLT spd = PyFloat_AS_DOUBLE(self->spread);
     
     pan = P_clip(pan);
     spd = P_clip(spd);
     
-    sprd = 20.0 - (sqrtf(spd) * 20.0) + 0.1;
+    sprd = 20.0 - (MYSQRT(spd) * 20.0) + 0.1;
 
     for (i=0; i<self->bufsize; i++) {
         inval = in[i];
         for (j=0; j<self->chnls; j++) {
-            phase = j / (float)self->chnls;
-            val = inval * powf(cosf((pan - phase) * TWOPI) * 0.5 + 0.5, sprd);
+            phase = j / (MYFLT)self->chnls;
+            val = inval * MYPOW(MYCOS((pan - phase) * TWOPI) * 0.5 + 0.5, sprd);
             self->buffer_streams[i+j*self->bufsize] = val;
         }
     }    
@@ -111,22 +111,22 @@ Panner_splitter_ii(Panner *self) {
 
 static void
 Panner_splitter_ai(Panner *self) {
-    float val, inval, phase, sprd;
+    MYFLT val, inval, phase, sprd;
     int j, i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
-    float *pan = Stream_getData((Stream *)self->pan_stream);
-    float spd = PyFloat_AS_DOUBLE(self->spread);
+    MYFLT *pan = Stream_getData((Stream *)self->pan_stream);
+    MYFLT spd = PyFloat_AS_DOUBLE(self->spread);
 
     spd = P_clip(spd);
     
-    sprd = 20.0 - (sqrtf(spd) * 20.0) + 0.1;
+    sprd = 20.0 - (MYSQRT(spd) * 20.0) + 0.1;
     
     for (i=0; i<self->bufsize; i++) {
         inval = in[i];
         for (j=0; j<self->chnls; j++) {
-            phase = j / (float)self->chnls;
-            val = inval * powf(cosf((P_clip(pan[i]) - phase) * TWOPI) * 0.5 + 0.5, sprd);
+            phase = j / (MYFLT)self->chnls;
+            val = inval * MYPOW(MYCOS((P_clip(pan[i]) - phase) * TWOPI) * 0.5 + 0.5, sprd);
             self->buffer_streams[i+j*self->bufsize] = val;
         }
     }    
@@ -134,22 +134,22 @@ Panner_splitter_ai(Panner *self) {
 
 static void
 Panner_splitter_ia(Panner *self) {
-    float val, inval, phase, spdval, sprd;
+    MYFLT val, inval, phase, spdval, sprd;
     int j, i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
-    float pan = PyFloat_AS_DOUBLE(self->pan);
-    float *spd = Stream_getData((Stream *)self->spread_stream);
+    MYFLT pan = PyFloat_AS_DOUBLE(self->pan);
+    MYFLT *spd = Stream_getData((Stream *)self->spread_stream);
 
     pan = P_clip(pan);
     
     for (i=0; i<self->bufsize; i++) {
         inval = in[i];
         spdval = P_clip(spd[i]);
-        sprd = 20.0 - (sqrtf(spdval) * 20.0) + 0.1;
+        sprd = 20.0 - (MYSQRT(spdval) * 20.0) + 0.1;
         for (j=0; j<self->chnls; j++) {
-            phase = j / (float)self->chnls;
-            val = inval * powf(cosf((pan - phase) * TWOPI) * 0.5 + 0.5, sprd);
+            phase = j / (MYFLT)self->chnls;
+            val = inval * MYPOW(MYCOS((pan - phase) * TWOPI) * 0.5 + 0.5, sprd);
             self->buffer_streams[i+j*self->bufsize] = val;
         }
     }    
@@ -157,30 +157,30 @@ Panner_splitter_ia(Panner *self) {
 
 static void
 Panner_splitter_aa(Panner *self) {
-    float val, inval, phase, spdval, sprd;
+    MYFLT val, inval, phase, spdval, sprd;
     int j, i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
-    float *pan = Stream_getData((Stream *)self->pan_stream);
-    float *spd = Stream_getData((Stream *)self->spread_stream);
+    MYFLT *pan = Stream_getData((Stream *)self->pan_stream);
+    MYFLT *spd = Stream_getData((Stream *)self->spread_stream);
     
     
     for (i=0; i<self->bufsize; i++) {
         inval = in[i];
         spdval = P_clip(spd[i]);
-        sprd = 20.0 - (sqrtf(spdval) * 20.0) + 0.1;
+        sprd = 20.0 - (MYSQRT(spdval) * 20.0) + 0.1;
         for (j=0; j<self->chnls; j++) {
-            phase = j / (float)self->chnls;
-            val = inval * powf(cosf((P_clip(pan[i]) - phase) * TWOPI) * 0.5 + 0.5, sprd);
+            phase = j / (MYFLT)self->chnls;
+            val = inval * MYPOW(MYCOS((P_clip(pan[i]) - phase) * TWOPI) * 0.5 + 0.5, sprd);
             self->buffer_streams[i+j*self->bufsize] = val;
         }
     }    
 }
 
-float *
+MYFLT *
 Panner_getSamplesBuffer(Panner *self)
 {
-    return (float *)self->buffer_streams;
+    return (MYFLT *)self->buffer_streams;
 }    
 
 static void
@@ -263,6 +263,7 @@ static PyObject * Panner_deleteStream(Panner *self) { DELETE_STREAM };
 static PyObject *
 Panner_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Panner *self;
     self = (Panner *)type->tp_alloc(type, 0);
     
@@ -302,11 +303,9 @@ Panner_init(Panner *self, PyObject *args, PyObject *kwds)
     Py_INCREF(self->stream);
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
 
-    self->buffer_streams = (float *)realloc(self->buffer_streams, self->chnls * self->bufsize * sizeof(float));
+    self->buffer_streams = (MYFLT *)realloc(self->buffer_streams, self->chnls * self->bufsize * sizeof(MYFLT));
 
     (*self->mode_func_ptr)(self);
-
-    Panner_compute_next_data_frame((Panner *)self);
 
     Py_INCREF(self);
     return 0;
@@ -315,7 +314,7 @@ Panner_init(Panner *self, PyObject *args, PyObject *kwds)
 static PyObject * Panner_getServer(Panner* self) { GET_SERVER };
 static PyObject * Panner_getStream(Panner* self) { GET_STREAM };
 
-static PyObject * Panner_play(Panner *self) { PLAY };
+static PyObject * Panner_play(Panner *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Panner_stop(Panner *self) { STOP };
 
 static PyObject *
@@ -399,7 +398,7 @@ static PyMethodDef Panner_methods[] = {
 {"getServer", (PyCFunction)Panner_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Panner_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Panner_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Panner_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Panner_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)Panner_stop, METH_NOARGS, "Stops computing."},
 {"setPan", (PyCFunction)Panner_setPan, METH_O, "Sets panning value between 0 and 1."},
 {"setSpread", (PyCFunction)Panner_setSpread, METH_O, "Sets spreading value between 0 and 1."},
@@ -509,7 +508,7 @@ static void
 Pan_compute_next_data_frame(Pan *self)
 {
     int i;
-    float *tmp;
+    MYFLT *tmp;
     int offset = self->chnl * self->bufsize;
     tmp = Panner_getSamplesBuffer((Panner *)self->mainSplitter);
     for (i=0; i<self->bufsize; i++) {
@@ -548,6 +547,7 @@ static PyObject * Pan_deleteStream(Pan *self) { DELETE_STREAM };
 static PyObject *
 Pan_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Pan *self;
     self = (Pan *)type->tp_alloc(type, 0);
     
@@ -587,9 +587,7 @@ Pan_init(Pan *self, PyObject *args, PyObject *kwds)
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
     (*self->mode_func_ptr)(self);
-    
-    Pan_compute_next_data_frame((Pan *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -601,7 +599,7 @@ static PyObject * Pan_setAdd(Pan *self, PyObject *arg) { SET_ADD };
 static PyObject * Pan_setSub(Pan *self, PyObject *arg) { SET_SUB };	
 static PyObject * Pan_setDiv(Pan *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * Pan_play(Pan *self) { PLAY };
+static PyObject * Pan_play(Pan *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Pan_out(Pan *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * Pan_stop(Pan *self) { STOP };
 
@@ -626,7 +624,7 @@ static PyMethodDef Pan_methods[] = {
 {"getServer", (PyCFunction)Pan_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Pan_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Pan_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Pan_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Pan_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"out", (PyCFunction)Pan_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)Pan_stop, METH_NOARGS, "Stops computing."},
 {"setMul", (PyCFunction)Pan_setMul, METH_O, "Sets Pan mul factor."},
@@ -733,52 +731,52 @@ typedef struct {
     int k1;
     int k2;
     int modebuffer[1];
-    float *buffer_streams;
+    MYFLT *buffer_streams;
 } SPanner;
 
 static void
 SPanner_splitter_st_i(SPanner *self) {
-    float val, inval;
+    MYFLT val, inval;
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
-    float pan = PyFloat_AS_DOUBLE(self->pan);
+    MYFLT pan = PyFloat_AS_DOUBLE(self->pan);
     pan = P_clip(pan);
     
     for (i=0; i<self->bufsize; i++) {
         inval = in[i];
-        val = inval * sqrtf(1.0 - pan);
+        val = inval * MYSQRT(1.0 - pan);
         self->buffer_streams[i] = val;
-        val = inval * sqrtf(pan);
+        val = inval * MYSQRT(pan);
         self->buffer_streams[i+self->bufsize] = val;
     }    
 }
 
 static void
 SPanner_splitter_st_a(SPanner *self) {
-    float val, inval, panval;
+    MYFLT val, inval, panval;
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
-    float *pan = Stream_getData((Stream *)self->pan_stream);
+    MYFLT *pan = Stream_getData((Stream *)self->pan_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inval = in[i];
         panval = P_clip(pan[i]);
-        val = inval * sqrtf(1.0 - panval);
+        val = inval * MYSQRT(1.0 - panval);
         self->buffer_streams[i] = val;
-        val = inval * sqrtf(panval);
+        val = inval * MYSQRT(panval);
         self->buffer_streams[i+self->bufsize] = val;
     }    
 }
 
 static void
 SPanner_splitter_i(SPanner *self) {
-    float val, inval, min, pan1, pan2;
+    MYFLT val, inval, min, pan1, pan2;
     int j, i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float pan = PyFloat_AS_DOUBLE(self->pan);
-    float fchnls = (float)self->chnls;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT pan = PyFloat_AS_DOUBLE(self->pan);
+    MYFLT fchnls = (MYFLT)self->chnls;
 
     for (i=0; i<self->bufsize; i++) {
         self->buffer_streams[i+self->k1] = 0.0;
@@ -803,8 +801,8 @@ SPanner_splitter_i(SPanner *self) {
     }    
 
     pan = P_clip((pan - min) * self->chnls);
-    pan1 = sqrtf(1.0 - pan);
-    pan2 = sqrtf(pan);
+    pan1 = MYSQRT(1.0 - pan);
+    pan2 = MYSQRT(pan);
     for (i=0; i<self->bufsize; i++) {
         inval = in[i];
         val = inval * pan1;
@@ -816,11 +814,11 @@ SPanner_splitter_i(SPanner *self) {
 
 static void
 SPanner_splitter_a(SPanner *self) {
-    float val, inval, min, pan;
+    MYFLT val, inval, min, pan;
     int i, j, j1, len;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *apan = Stream_getData((Stream *)self->pan_stream);
-    float fchnls = (float)self->chnls;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *apan = Stream_getData((Stream *)self->pan_stream);
+    MYFLT fchnls = (MYFLT)self->chnls;
     
     len = self->chnls * self->bufsize;
     for (i=0; i<len; i++) {
@@ -848,17 +846,17 @@ SPanner_splitter_a(SPanner *self) {
         }    
         
         pan = P_clip((pan - min) * self->chnls);
-        val = inval * sqrtf(1.0 - pan);
+        val = inval * MYSQRT(1.0 - pan);
         self->buffer_streams[i+self->k1] = val;
-        val = inval * sqrtf(pan);
+        val = inval * MYSQRT(pan);
         self->buffer_streams[i+self->k2] = val;
     }    
 }
 
-float *
+MYFLT *
 SPanner_getSamplesBuffer(SPanner *self)
 {
-    return (float *)self->buffer_streams;
+    return (MYFLT *)self->buffer_streams;
 }    
 
 static void
@@ -931,6 +929,7 @@ static PyObject * SPanner_deleteStream(SPanner *self) { DELETE_STREAM };
 static PyObject *
 SPanner_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     SPanner *self;
     self = (SPanner *)type->tp_alloc(type, 0);
     
@@ -967,7 +966,7 @@ SPanner_init(SPanner *self, PyObject *args, PyObject *kwds)
     Py_INCREF(self->stream);
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
 
-    self->buffer_streams = (float *)realloc(self->buffer_streams, self->chnls * self->bufsize * sizeof(float));
+    self->buffer_streams = (MYFLT *)realloc(self->buffer_streams, self->chnls * self->bufsize * sizeof(MYFLT));
     
     (*self->mode_func_ptr)(self);
 
@@ -975,8 +974,6 @@ SPanner_init(SPanner *self, PyObject *args, PyObject *kwds)
     for (i=0; i<len; i++) {
         self->buffer_streams[i] = 0.0;
     }
-    
-    SPanner_compute_next_data_frame((SPanner *)self);
 
     Py_INCREF(self);
     return 0;
@@ -985,7 +982,7 @@ SPanner_init(SPanner *self, PyObject *args, PyObject *kwds)
 static PyObject * SPanner_getServer(SPanner* self) { GET_SERVER };
 static PyObject * SPanner_getStream(SPanner* self) { GET_STREAM };
 
-static PyObject * SPanner_play(SPanner *self) { PLAY };
+static PyObject * SPanner_play(SPanner *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * SPanner_stop(SPanner *self) { STOP };
 
 static PyObject *
@@ -1034,7 +1031,7 @@ static PyMethodDef SPanner_methods[] = {
 {"getServer", (PyCFunction)SPanner_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)SPanner_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)SPanner_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)SPanner_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)SPanner_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)SPanner_stop, METH_NOARGS, "Stops computing."},
 {"setPan", (PyCFunction)SPanner_setPan, METH_O, "Sets panning value between 0 and 1."},
 {NULL}  /* Sentinel */
@@ -1143,7 +1140,7 @@ static void
 SPan_compute_next_data_frame(SPan *self)
 {
     int i;
-    float *tmp;
+    MYFLT *tmp;
     int offset = self->chnl * self->bufsize;
     tmp = SPanner_getSamplesBuffer((SPanner *)self->mainSplitter);
     for (i=0; i<self->bufsize; i++) {
@@ -1182,6 +1179,7 @@ static PyObject * SPan_deleteStream(SPan *self) { DELETE_STREAM };
 static PyObject *
 SPan_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     SPan *self;
     self = (SPan *)type->tp_alloc(type, 0);
     
@@ -1222,8 +1220,6 @@ SPan_init(SPan *self, PyObject *args, PyObject *kwds)
     
     (*self->mode_func_ptr)(self);
     
-    SPan_compute_next_data_frame((SPan *)self);
-
     Py_INCREF(self);
     return 0;
 }
@@ -1235,7 +1231,7 @@ static PyObject * SPan_setAdd(SPan *self, PyObject *arg) { SET_ADD };
 static PyObject * SPan_setSub(SPan *self, PyObject *arg) { SET_SUB };	
 static PyObject * SPan_setDiv(SPan *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * SPan_play(SPan *self) { PLAY };
+static PyObject * SPan_play(SPan *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * SPan_out(SPan *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * SPan_stop(SPan *self) { STOP };
 
@@ -1260,7 +1256,7 @@ static PyMethodDef SPan_methods[] = {
 {"getServer", (PyCFunction)SPan_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)SPan_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)SPan_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)SPan_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)SPan_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"out", (PyCFunction)SPan_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)SPan_stop, METH_NOARGS, "Stops computing."},
 {"setMul", (PyCFunction)SPan_setMul, METH_O, "Sets SPan mul factor."},
@@ -1367,11 +1363,11 @@ typedef struct {
     int k1;
     int k2;
     int modebuffer[1];
-    float *buffer_streams;
+    MYFLT *buffer_streams;
 } Switcher;
 
-static float
-Switcher_clip_voice(Switcher *self, float v) {
+static MYFLT
+Switcher_clip_voice(Switcher *self, MYFLT v) {
     int chnls = self->chnls - 1;
     if (v < 0.0)
         return 0.0;
@@ -1383,10 +1379,10 @@ Switcher_clip_voice(Switcher *self, float v) {
 
 static void
 Switcher_splitter_i(Switcher *self) {
-    float val, inval, voice1, voice2;
+    MYFLT val, inval, voice1, voice2;
     int j1, j, i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float voice = Switcher_clip_voice(self, PyFloat_AS_DOUBLE(self->voice));
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT voice = Switcher_clip_voice(self, PyFloat_AS_DOUBLE(self->voice));
     
     for (i=0; i<self->bufsize; i++) {
         self->buffer_streams[i+self->k1] = 0.0;
@@ -1403,8 +1399,8 @@ Switcher_splitter_i(Switcher *self) {
     self->k2 = j * self->bufsize;
 
     voice = P_clip(voice - j1);
-    voice1 = sqrtf(1.0 - voice);
-    voice2 = sqrtf(voice);
+    voice1 = MYSQRT(1.0 - voice);
+    voice2 = MYSQRT(voice);
 
     for (i=0; i<self->bufsize; i++) {
         inval = in[i];
@@ -1417,10 +1413,10 @@ Switcher_splitter_i(Switcher *self) {
 
 static void
 Switcher_splitter_a(Switcher *self) {
-    float inval, voice;
+    MYFLT inval, voice;
     int i, j, j1, len;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *avoice = Stream_getData((Stream *)self->voice_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *avoice = Stream_getData((Stream *)self->voice_stream);
     
     len = self->chnls * self->bufsize;
     for (i=0; i<len; i++) {
@@ -1442,15 +1438,15 @@ Switcher_splitter_a(Switcher *self) {
         
         voice = P_clip(voice - j1);
         
-        self->buffer_streams[i+self->k1] = inval * sqrtf(1.0 - voice);
-        self->buffer_streams[i+self->k2] = inval * sqrtf(voice);
+        self->buffer_streams[i+self->k1] = inval * MYSQRT(1.0 - voice);
+        self->buffer_streams[i+self->k2] = inval * MYSQRT(voice);
     }    
 }
 
-float *
+MYFLT *
 Switcher_getSamplesBuffer(Switcher *self)
 {
-    return (float *)self->buffer_streams;
+    return (MYFLT *)self->buffer_streams;
 }    
 
 static void
@@ -1508,6 +1504,7 @@ static PyObject * Switcher_deleteStream(Switcher *self) { DELETE_STREAM };
 static PyObject *
 Switcher_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Switcher *self;
     self = (Switcher *)type->tp_alloc(type, 0);
     
@@ -1544,7 +1541,7 @@ Switcher_init(Switcher *self, PyObject *args, PyObject *kwds)
     Py_INCREF(self->stream);
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
-    self->buffer_streams = (float *)realloc(self->buffer_streams, self->chnls * self->bufsize * sizeof(float));
+    self->buffer_streams = (MYFLT *)realloc(self->buffer_streams, self->chnls * self->bufsize * sizeof(MYFLT));
     
     (*self->mode_func_ptr)(self);
     
@@ -1552,9 +1549,7 @@ Switcher_init(Switcher *self, PyObject *args, PyObject *kwds)
     for (i=0; i<len; i++) {
         self->buffer_streams[i] = 0.0;
     }
-    
-    Switcher_compute_next_data_frame((Switcher *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -1562,7 +1557,7 @@ Switcher_init(Switcher *self, PyObject *args, PyObject *kwds)
 static PyObject * Switcher_getServer(Switcher* self) { GET_SERVER };
 static PyObject * Switcher_getStream(Switcher* self) { GET_STREAM };
 
-static PyObject * Switcher_play(Switcher *self) { PLAY };
+static PyObject * Switcher_play(Switcher *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Switcher_stop(Switcher *self) { STOP };
 
 static PyObject *
@@ -1611,7 +1606,7 @@ static PyMethodDef Switcher_methods[] = {
     {"getServer", (PyCFunction)Switcher_getServer, METH_NOARGS, "Returns server object."},
     {"_getStream", (PyCFunction)Switcher_getStream, METH_NOARGS, "Returns stream object."},
     {"deleteStream", (PyCFunction)Switcher_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-    {"play", (PyCFunction)Switcher_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+    {"play", (PyCFunction)Switcher_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
     {"stop", (PyCFunction)Switcher_stop, METH_NOARGS, "Stops computing."},
     {"setVoice", (PyCFunction)Switcher_setVoice, METH_O, "Sets voice value between 0 and outs-1."},
     {NULL}  /* Sentinel */
@@ -1720,7 +1715,7 @@ static void
 Switch_compute_next_data_frame(Switch *self)
 {
     int i;
-    float *tmp;
+    MYFLT *tmp;
     int offset = self->chnl * self->bufsize;
     tmp = Switcher_getSamplesBuffer((Switcher *)self->mainSplitter);
     for (i=0; i<self->bufsize; i++) {
@@ -1759,6 +1754,7 @@ static PyObject * Switch_deleteStream(Switch *self) { DELETE_STREAM };
 static PyObject *
 Switch_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Switch *self;
     self = (Switch *)type->tp_alloc(type, 0);
     
@@ -1798,9 +1794,7 @@ Switch_init(Switch *self, PyObject *args, PyObject *kwds)
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
     (*self->mode_func_ptr)(self);
-    
-    Switch_compute_next_data_frame((Switch *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -1812,7 +1806,7 @@ static PyObject * Switch_setAdd(Switch *self, PyObject *arg) { SET_ADD };
 static PyObject * Switch_setSub(Switch *self, PyObject *arg) { SET_SUB };	
 static PyObject * Switch_setDiv(Switch *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * Switch_play(Switch *self) { PLAY };
+static PyObject * Switch_play(Switch *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Switch_out(Switch *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * Switch_stop(Switch *self) { STOP };
 
@@ -1837,7 +1831,7 @@ static PyMethodDef Switch_methods[] = {
     {"getServer", (PyCFunction)Switch_getServer, METH_NOARGS, "Returns server object."},
     {"_getStream", (PyCFunction)Switch_getStream, METH_NOARGS, "Returns stream object."},
     {"deleteStream", (PyCFunction)Switch_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-    {"play", (PyCFunction)Switch_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+    {"play", (PyCFunction)Switch_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
     {"out", (PyCFunction)Switch_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
     {"stop", (PyCFunction)Switch_stop, METH_NOARGS, "Stops computing."},
     {"setMul", (PyCFunction)Switch_setMul, METH_O, "Sets Switch mul factor."},
@@ -1943,8 +1937,8 @@ typedef struct {
     int modebuffer[3]; // need at least 2 slots for mul & add 
 } Selector;
 
-static float
-Selector_clip_voice(Selector *self, float v) {
+static MYFLT
+Selector_clip_voice(Selector *self, MYFLT v) {
     int chSize = self->chSize - 1;
     if (v < 0.0)
         return 0.0;
@@ -1957,8 +1951,8 @@ Selector_clip_voice(Selector *self, float v) {
 static void
 Selector_generate_i(Selector *self) {
     int j1, j, i;
-    float  voice1, voice2;
-    float voice = Selector_clip_voice(self, PyFloat_AS_DOUBLE(self->voice));
+    MYFLT  voice1, voice2;
+    MYFLT voice = Selector_clip_voice(self, PyFloat_AS_DOUBLE(self->voice));
 
     j1 = (int)voice;
     j = j1 + 1;
@@ -1966,12 +1960,12 @@ Selector_generate_i(Selector *self) {
         j1--; j--;
     }
 
-    float *st1 = Stream_getData((Stream *)PyObject_CallMethod((PyObject *)PyList_GET_ITEM(self->inputs, j1), "_getStream", NULL));
-    float *st2 = Stream_getData((Stream *)PyObject_CallMethod((PyObject *)PyList_GET_ITEM(self->inputs, j), "_getStream", NULL));
+    MYFLT *st1 = Stream_getData((Stream *)PyObject_CallMethod((PyObject *)PyList_GET_ITEM(self->inputs, j1), "_getStream", NULL));
+    MYFLT *st2 = Stream_getData((Stream *)PyObject_CallMethod((PyObject *)PyList_GET_ITEM(self->inputs, j), "_getStream", NULL));
 
     voice = P_clip(voice - j1);
-    voice1 = sqrtf(1.0 - voice);
-    voice2 = sqrtf(voice);
+    voice1 = MYSQRT(1.0 - voice);
+    voice2 = MYSQRT(voice);
     
     for (i=0; i<self->bufsize; i++) {
         self->data[i] = st1[i] * voice1 + st2[i] * voice2;
@@ -1981,9 +1975,9 @@ Selector_generate_i(Selector *self) {
 static void
 Selector_generate_a(Selector *self) {
     int old_j1, old_j, j1, j, i;
-    float  voice;
-    float *st1, *st2;
-    float *vc = Stream_getData((Stream *)self->voice_stream);
+    MYFLT  voice;
+    MYFLT *st1, *st2;
+    MYFLT *vc = Stream_getData((Stream *)self->voice_stream);
 
     old_j1 = 0; 
     old_j = 1;
@@ -2009,7 +2003,7 @@ Selector_generate_a(Selector *self) {
 
         voice = P_clip(voice - j1);
 
-        self->data[i] = st1[i] * sqrtf(1.0 - voice) + st2[i] * sqrtf(voice);
+        self->data[i] = st1[i] * MYSQRT(1.0 - voice) + st2[i] * MYSQRT(voice);
     }
 }
 
@@ -2110,6 +2104,7 @@ static PyObject * Selector_deleteStream(Selector *self) { DELETE_STREAM };
 static PyObject *
 Selector_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Selector *self;
     self = (Selector *)type->tp_alloc(type, 0);
     
@@ -2154,9 +2149,7 @@ Selector_init(Selector *self, PyObject *args, PyObject *kwds)
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
     (*self->mode_func_ptr)(self);
-    
-    Selector_compute_next_data_frame((Selector *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -2168,7 +2161,7 @@ static PyObject * Selector_setAdd(Selector *self, PyObject *arg) { SET_ADD };
 static PyObject * Selector_setSub(Selector *self, PyObject *arg) { SET_SUB };	
 static PyObject * Selector_setDiv(Selector *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * Selector_play(Selector *self) { PLAY };
+static PyObject * Selector_play(Selector *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Selector_out(Selector *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * Selector_stop(Selector *self) { STOP };
 
@@ -2250,7 +2243,7 @@ static PyMethodDef Selector_methods[] = {
 {"getServer", (PyCFunction)Selector_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Selector_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Selector_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Selector_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Selector_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"out", (PyCFunction)Selector_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)Selector_stop, METH_NOARGS, "Stops computing."},
 {"setInputs", (PyCFunction)Selector_setInputs, METH_O, "Sets list of input streams."},
@@ -2344,4 +2337,638 @@ Selector_members,                                 /* tp_members */
 (initproc)Selector_init,                          /* tp_init */
 0,                                              /* tp_alloc */
 Selector_new,                                     /* tp_new */
+};
+
+/****************/
+/**** Mixer *****/
+/****************/
+typedef struct {
+    pyo_audio_HEAD
+    PyObject *inputs;
+    PyObject *gains;
+    PyObject *lastGains;
+    PyObject *currentGains;
+    PyObject *stepVals;
+    PyObject *timeCounts;
+    int num_outs;
+    MYFLT time;
+    long timeStep;
+    MYFLT *buffer_streams;
+} Mixer;
+
+static void
+Mixer_generate(Mixer *self) {
+    int num, k, j, i, tmpCount;
+    MYFLT amp, lastAmp, currentAmp, tmpStepVal;
+    PyObject *keys;
+    PyObject *key;
+    PyObject *list_of_gains, *list_of_last_gains, *list_of_current_gains, *list_of_step_vals, *list_of_time_counts;
+
+    for (i=0; i<(self->num_outs * self->bufsize); i++) {
+        self->buffer_streams[i] = 0.0;
+    }
+    
+    keys = PyDict_Keys(self->inputs);
+    num = PyList_Size(keys);
+
+    if (num == 0)
+        return;
+
+    for (j=0; j<num; j++) {
+        key = PyList_GET_ITEM(keys, j);
+        MYFLT *st = Stream_getData((Stream *)PyObject_CallMethod((PyObject *)PyDict_GetItem(self->inputs, key), "_getStream", NULL));
+        list_of_gains = PyDict_GetItem(self->gains, key);
+        list_of_last_gains = PyDict_GetItem(self->lastGains, key);
+        list_of_current_gains = PyDict_GetItem(self->currentGains, key);
+        list_of_step_vals = PyDict_GetItem(self->stepVals, key);
+        list_of_time_counts = PyDict_GetItem(self->timeCounts, key);
+        for (k=0; k<self->num_outs; k++) {
+            amp = (MYFLT)PyFloat_AS_DOUBLE(PyList_GET_ITEM(list_of_gains, k));
+            lastAmp = (MYFLT)PyFloat_AS_DOUBLE(PyList_GET_ITEM(list_of_last_gains, k));
+            currentAmp = (MYFLT)PyFloat_AS_DOUBLE(PyList_GET_ITEM(list_of_current_gains, k));
+            tmpStepVal = (MYFLT)PyFloat_AS_DOUBLE(PyList_GET_ITEM(list_of_step_vals, k));
+            tmpCount = (int)PyLong_AsLong(PyList_GET_ITEM(list_of_time_counts, k));
+            if (amp != lastAmp) {
+                tmpCount = 0;
+                tmpStepVal = (amp - currentAmp) / self->timeStep;
+                PyList_SET_ITEM(list_of_last_gains, k, PyFloat_FromDouble(amp));
+            }    
+            for (i=0; i<self->bufsize; i++) {
+                if (tmpCount == (self->timeStep - 1)) {
+                    currentAmp = amp;
+                    tmpCount++;
+                }
+                else if (tmpCount < self->timeStep) {
+                    currentAmp += tmpStepVal;
+                    tmpCount++;
+                }    
+                self->buffer_streams[self->bufsize * k + i] += st[i] * currentAmp;
+            }
+            PyList_SET_ITEM(list_of_current_gains, k, PyFloat_FromDouble(currentAmp));
+            PyList_SET_ITEM(list_of_step_vals, k, PyFloat_FromDouble(tmpStepVal));
+            PyList_SET_ITEM(list_of_time_counts, k, PyLong_FromLong(tmpCount));
+        }    
+    }
+}
+
+MYFLT *
+Mixer_getSamplesBuffer(Mixer *self)
+{
+    return (MYFLT *)self->buffer_streams;
+}    
+
+static void
+Mixer_setProcMode(Mixer *self)
+{
+    self->proc_func_ptr = Mixer_generate;
+}
+
+static void
+Mixer_compute_next_data_frame(Mixer *self)
+{
+    (*self->proc_func_ptr)(self); 
+}
+
+static int
+Mixer_traverse(Mixer *self, visitproc visit, void *arg)
+{
+    pyo_VISIT
+    Py_VISIT(self->inputs);
+    Py_VISIT(self->gains);
+    return 0;
+}
+
+static int 
+Mixer_clear(Mixer *self)
+{
+    pyo_CLEAR
+    Py_CLEAR(self->inputs);
+    Py_CLEAR(self->gains);
+    return 0;
+}
+
+static void
+Mixer_dealloc(Mixer* self)
+{
+    free(self->data);
+    free(self->buffer_streams);
+    Mixer_clear(self);
+    self->ob_type->tp_free((PyObject*)self);
+}
+
+static PyObject * Mixer_deleteStream(Mixer *self) { DELETE_STREAM };
+
+static PyObject *
+Mixer_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    int i;
+    Mixer *self;
+    self = (Mixer *)type->tp_alloc(type, 0);
+    
+    self->inputs = PyDict_New();
+    self->gains = PyDict_New();
+    self->lastGains = PyDict_New();
+    self->currentGains = PyDict_New();
+    self->stepVals = PyDict_New();
+    self->timeCounts = PyDict_New();
+    self->num_outs = 2;
+    self->time = 0.025;
+    self->timeStep = (long)(self->time * self->sr);
+    
+    INIT_OBJECT_COMMON
+    Stream_setFunctionPtr(self->stream, Mixer_compute_next_data_frame);
+    self->mode_func_ptr = Mixer_setProcMode;
+    return (PyObject *)self;
+}
+
+static int
+Mixer_init(Mixer *self, PyObject *args, PyObject *kwds)
+{    
+    static char *kwlist[] = {"outs", "time", NULL};
+    
+    PyObject *timetmp=NULL;
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "|iO", kwlist, &self->num_outs, &timetmp))
+        return -1; 
+
+    if (timetmp) {
+        PyObject_CallMethod((PyObject *)self, "setTime", "O", timetmp);
+    }
+    
+    Py_INCREF(self->stream);
+    PyObject_CallMethod(self->server, "addStream", "O", self->stream);
+
+    self->buffer_streams = (MYFLT *)realloc(self->buffer_streams, self->num_outs * self->bufsize * sizeof(MYFLT));
+
+    (*self->mode_func_ptr)(self);
+    
+    Py_INCREF(self);
+    return 0;
+}
+
+static PyObject * Mixer_getServer(Mixer* self) { GET_SERVER };
+static PyObject * Mixer_getStream(Mixer* self) { GET_STREAM };
+
+static PyObject * Mixer_play(Mixer *self, PyObject *args, PyObject *kwds) { PLAY };
+static PyObject * Mixer_stop(Mixer *self) { STOP };
+
+static PyObject *
+Mixer_setTime(Mixer *self, PyObject *arg)
+{
+    int i, j, num;
+	PyObject *tmp, *keys, *key, *list_of_time_counts;
+	
+	if (arg == NULL) {
+		Py_INCREF(Py_None);
+		return Py_None;
+	}
+    
+	int isNumber = PyNumber_Check(arg);
+	
+	tmp = arg;
+	Py_INCREF(tmp);
+	if (isNumber == 1) {
+		self->time = PyFloat_AS_DOUBLE(PyNumber_Float(tmp));
+        self->timeStep = (long)(self->time * self->sr);
+        
+        keys = PyDict_Keys(self->inputs);
+        num = PyList_Size(keys);
+        if (num != 0) {
+            for (j=0; j<num; j++) {
+                key = PyList_GET_ITEM(keys, j);
+                list_of_time_counts = PyDict_GetItem(self->timeCounts, key);
+                for (i=0; i<self->num_outs; i++) {
+                    PyList_SET_ITEM(list_of_time_counts, i, PyLong_FromLong(self->timeStep-1));
+                }    
+            }
+        }    
+	}
+    
+	Py_INCREF(Py_None);
+	return Py_None;
+}	
+
+static PyObject *
+Mixer_addInput(Mixer *self, PyObject *args, PyObject *kwds)
+{
+    int i;
+	PyObject *tmp;
+    PyObject *initGains;
+    PyObject *initLastGains;
+    PyObject *initCurrentGains;
+    PyObject *initStepVals;
+    PyObject *initTimeCounts;
+    PyObject *voice;
+
+    static char *kwlist[] = {"voice", "input", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "OO", kwlist, &voice, &tmp)) {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+    
+    PyDict_SetItem(self->inputs, voice, tmp);
+    initGains = PyList_New(self->num_outs);
+    initLastGains = PyList_New(self->num_outs);
+    initCurrentGains = PyList_New(self->num_outs);
+    initStepVals = PyList_New(self->num_outs);
+    initTimeCounts = PyList_New(self->num_outs);
+    for (i=0; i<self->num_outs; i++) {
+        PyList_SET_ITEM(initGains, i, PyFloat_FromDouble(0.0));
+        PyList_SET_ITEM(initLastGains, i, PyFloat_FromDouble(0.0));
+        PyList_SET_ITEM(initCurrentGains, i, PyFloat_FromDouble(0.0));
+        PyList_SET_ITEM(initStepVals, i, PyFloat_FromDouble(0.0));
+        PyList_SET_ITEM(initTimeCounts, i, PyInt_FromLong(0));
+    }
+    PyDict_SetItem(self->gains, voice, initGains);
+    PyDict_SetItem(self->lastGains, voice, initLastGains);
+    PyDict_SetItem(self->currentGains, voice, initCurrentGains);
+    PyDict_SetItem(self->stepVals, voice, initStepVals);
+    PyDict_SetItem(self->timeCounts, voice, initTimeCounts);
+    
+	Py_INCREF(Py_None);
+	return Py_None;
+}	
+
+static PyObject *
+Mixer_delInput(Mixer *self, PyObject *arg)
+{
+    int ret;
+    
+    PyObject *key = arg;
+    ret = PyDict_DelItem(self->inputs, key);
+    if (ret == 0) {
+        PyDict_DelItem(self->gains, key);
+        PyDict_DelItem(self->lastGains, key);
+        PyDict_DelItem(self->currentGains, key);
+        PyDict_DelItem(self->stepVals, key);
+        PyDict_DelItem(self->timeCounts, key);
+    }    
+    else {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+
+	Py_INCREF(Py_None);
+	return Py_None;        
+}
+
+static PyObject *
+Mixer_setAmp(Mixer *self, PyObject *args, PyObject *kwds)
+{
+    int tmpout;
+    PyObject *tmpin, *amp;
+    static char *kwlist[] = {"vin", "vout", "amp", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "OiO", kwlist, &tmpin, &tmpout, &amp)) {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+    
+    if (! PyNumber_Check(amp)) {
+        printf("Amplitude must be a number!n");
+        Py_INCREF(Py_None);
+        return Py_None;        
+    }
+    
+    Py_INCREF(amp);
+    PyList_SET_ITEM(PyDict_GetItem(self->gains, tmpin), tmpout, PyNumber_Float(amp));
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyMemberDef Mixer_members[] = {
+    {"server", T_OBJECT_EX, offsetof(Mixer, server), 0, "Pyo server."},
+    {"stream", T_OBJECT_EX, offsetof(Mixer, stream), 0, "Stream object."},
+    {"inputs", T_OBJECT_EX, offsetof(Mixer, inputs), 0, "Dictionary of input streams."},
+    {"gains", T_OBJECT_EX, offsetof(Mixer, gains), 0, "Dictionary of list of amplitudes."},
+    {NULL}  /* Sentinel */
+};
+
+static PyMethodDef Mixer_methods[] = {
+    {"getServer", (PyCFunction)Mixer_getServer, METH_NOARGS, "Returns server object."},
+    {"_getStream", (PyCFunction)Mixer_getStream, METH_NOARGS, "Returns stream object."},
+    {"deleteStream", (PyCFunction)Mixer_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
+    {"play", (PyCFunction)Mixer_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
+    {"stop", (PyCFunction)Mixer_stop, METH_NOARGS, "Stops computing."},
+    {"setTime", (PyCFunction)Mixer_setTime, METH_O, "Sets ramp time in seconds."},
+    {"addInput", (PyCFunction)Mixer_addInput, METH_VARARGS|METH_KEYWORDS, "Adds an input to the mixer."},
+    {"delInput", (PyCFunction)Mixer_delInput, METH_O, "Removes an input from the mixer."},
+    {"setAmp", (PyCFunction)Mixer_setAmp, METH_VARARGS|METH_KEYWORDS, "Sets the amplitude of a specific input toward a specific output."},
+    {NULL}  /* Sentinel */
+};
+
+PyTypeObject MixerType = {
+    PyObject_HEAD_INIT(NULL)
+    0,                                              /*ob_size*/
+    "_pyo.Mixer_base",                                   /*tp_name*/
+    sizeof(Mixer),                                 /*tp_basicsize*/
+    0,                                              /*tp_itemsize*/
+    (destructor)Mixer_dealloc,                     /*tp_dealloc*/
+    0,                                              /*tp_print*/
+    0,                                              /*tp_getattr*/
+    0,                                              /*tp_setattr*/
+    0,                                              /*tp_compare*/
+    0,                                              /*tp_repr*/
+    0,                              /*tp_as_number*/
+    0,                                              /*tp_as_sequence*/
+    0,                                              /*tp_as_mapping*/
+    0,                                              /*tp_hash */
+    0,                                              /*tp_call*/
+    0,                                              /*tp_str*/
+    0,                                              /*tp_getattro*/
+    0,                                              /*tp_setattro*/
+    0,                                              /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES, /*tp_flags*/
+    "Mixer objects. Mixes multiple inputs toward multiple outputs.",           /* tp_doc */
+    (traverseproc)Mixer_traverse,                  /* tp_traverse */
+    (inquiry)Mixer_clear,                          /* tp_clear */
+    0,                                              /* tp_richcompare */
+    0,                                              /* tp_weaklistoffset */
+    0,                                              /* tp_iter */
+    0,                                              /* tp_iternext */
+    Mixer_methods,                                 /* tp_methods */
+    Mixer_members,                                 /* tp_members */
+    0,                                              /* tp_getset */
+    0,                                              /* tp_base */
+    0,                                              /* tp_dict */
+    0,                                              /* tp_descr_get */
+    0,                                              /* tp_descr_set */
+    0,                                              /* tp_dictoffset */
+    (initproc)Mixer_init,                          /* tp_init */
+    0,                                              /* tp_alloc */
+    Mixer_new,                                     /* tp_new */
+};
+
+/************************************************************************************************/
+/* MixerVoice streamer object */
+/************************************************************************************************/
+typedef struct {
+    pyo_audio_HEAD
+    Mixer *mainMixer;
+    int modebuffer[2];
+    int chnl; // voice order
+} MixerVoice;
+
+static void MixerVoice_postprocessing_ii(MixerVoice *self) { POST_PROCESSING_II };
+static void MixerVoice_postprocessing_ai(MixerVoice *self) { POST_PROCESSING_AI };
+static void MixerVoice_postprocessing_ia(MixerVoice *self) { POST_PROCESSING_IA };
+static void MixerVoice_postprocessing_aa(MixerVoice *self) { POST_PROCESSING_AA };
+static void MixerVoice_postprocessing_ireva(MixerVoice *self) { POST_PROCESSING_IREVA };
+static void MixerVoice_postprocessing_areva(MixerVoice *self) { POST_PROCESSING_AREVA };
+static void MixerVoice_postprocessing_revai(MixerVoice *self) { POST_PROCESSING_REVAI };
+static void MixerVoice_postprocessing_revaa(MixerVoice *self) { POST_PROCESSING_REVAA };
+static void MixerVoice_postprocessing_revareva(MixerVoice *self) { POST_PROCESSING_REVAREVA };
+
+static void
+MixerVoice_setProcMode(MixerVoice *self)
+{
+    int muladdmode;
+    muladdmode = self->modebuffer[0] + self->modebuffer[1] * 10;
+    
+	switch (muladdmode) {
+        case 0:        
+            self->muladd_func_ptr = MixerVoice_postprocessing_ii;
+            break;
+        case 1:    
+            self->muladd_func_ptr = MixerVoice_postprocessing_ai;
+            break;
+        case 2:    
+            self->muladd_func_ptr = MixerVoice_postprocessing_revai;
+            break;
+        case 10:        
+            self->muladd_func_ptr = MixerVoice_postprocessing_ia;
+            break;
+        case 11:    
+            self->muladd_func_ptr = MixerVoice_postprocessing_aa;
+            break;
+        case 12:    
+            self->muladd_func_ptr = MixerVoice_postprocessing_revaa;
+            break;
+        case 20:        
+            self->muladd_func_ptr = MixerVoice_postprocessing_ireva;
+            break;
+        case 21:    
+            self->muladd_func_ptr = MixerVoice_postprocessing_areva;
+            break;
+        case 22:    
+            self->muladd_func_ptr = MixerVoice_postprocessing_revareva;
+            break;
+    }
+}
+
+static void
+MixerVoice_compute_next_data_frame(MixerVoice *self)
+{
+    int i;
+    MYFLT *tmp;
+    int offset = self->chnl * self->bufsize;
+    tmp = Mixer_getSamplesBuffer((Mixer *)self->mainMixer);
+    //printf("sample value : %f\n", tmp[offset]);
+    for (i=0; i<self->bufsize; i++) {
+        self->data[i] = tmp[i + offset];
+    }    
+    (*self->muladd_func_ptr)(self);
+    Stream_setData(self->stream, self->data);
+}
+
+static int
+MixerVoice_traverse(MixerVoice *self, visitproc visit, void *arg)
+{
+    pyo_VISIT
+    Py_VISIT(self->mainMixer);
+    return 0;
+}
+
+static int 
+MixerVoice_clear(MixerVoice *self)
+{
+    pyo_CLEAR
+    Py_CLEAR(self->mainMixer);    
+    return 0;
+}
+
+static void
+MixerVoice_dealloc(MixerVoice* self)
+{
+    free(self->data);
+    MixerVoice_clear(self);
+    self->ob_type->tp_free((PyObject*)self);
+}
+
+static PyObject * MixerVoice_deleteStream(MixerVoice *self) { DELETE_STREAM };
+
+static PyObject *
+MixerVoice_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    int i;
+    MixerVoice *self;
+    self = (MixerVoice *)type->tp_alloc(type, 0);
+    
+	self->modebuffer[0] = 0;
+	self->modebuffer[1] = 0;
+    
+    INIT_OBJECT_COMMON
+    Stream_setFunctionPtr(self->stream, MixerVoice_compute_next_data_frame);
+    self->mode_func_ptr = MixerVoice_setProcMode;
+    
+    return (PyObject *)self;
+}
+
+static int
+MixerVoice_init(MixerVoice *self, PyObject *args, PyObject *kwds)
+{
+    PyObject *maintmp=NULL, *multmp=NULL, *addtmp=NULL;
+    
+    static char *kwlist[] = {"mainMixer", "chnl", "mul", "add", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "Oi|OO", kwlist, &maintmp, &self->chnl, &multmp, &addtmp))
+        return -1; 
+    
+    Py_XDECREF(self->mainMixer);
+    Py_INCREF(maintmp);
+    self->mainMixer = (Mixer *)maintmp;
+    
+    if (multmp) {
+        PyObject_CallMethod((PyObject *)self, "setMul", "O", multmp);
+    }
+    
+    if (addtmp) {
+        PyObject_CallMethod((PyObject *)self, "setAdd", "O", addtmp);
+    }
+    
+    Py_INCREF(self->stream);
+    PyObject_CallMethod(self->server, "addStream", "O", self->stream);
+    
+    (*self->mode_func_ptr)(self);
+    
+    Py_INCREF(self);
+    return 0;
+}
+
+static PyObject * MixerVoice_getServer(MixerVoice* self) { GET_SERVER };
+static PyObject * MixerVoice_getStream(MixerVoice* self) { GET_STREAM };
+static PyObject * MixerVoice_setMul(MixerVoice *self, PyObject *arg) { SET_MUL };	
+static PyObject * MixerVoice_setAdd(MixerVoice *self, PyObject *arg) { SET_ADD };	
+static PyObject * MixerVoice_setSub(MixerVoice *self, PyObject *arg) { SET_SUB };	
+static PyObject * MixerVoice_setDiv(MixerVoice *self, PyObject *arg) { SET_DIV };	
+
+static PyObject * MixerVoice_play(MixerVoice *self, PyObject *args, PyObject *kwds) { PLAY };
+static PyObject * MixerVoice_out(MixerVoice *self, PyObject *args, PyObject *kwds) { OUT };
+static PyObject * MixerVoice_stop(MixerVoice *self) { STOP };
+
+static PyObject * MixerVoice_multiply(MixerVoice *self, PyObject *arg) { MULTIPLY };
+static PyObject * MixerVoice_inplace_multiply(MixerVoice *self, PyObject *arg) { INPLACE_MULTIPLY };
+static PyObject * MixerVoice_add(MixerVoice *self, PyObject *arg) { ADD };
+static PyObject * MixerVoice_inplace_add(MixerVoice *self, PyObject *arg) { INPLACE_ADD };
+static PyObject * MixerVoice_sub(MixerVoice *self, PyObject *arg) { SUB };
+static PyObject * MixerVoice_inplace_sub(MixerVoice *self, PyObject *arg) { INPLACE_SUB };
+static PyObject * MixerVoice_div(MixerVoice *self, PyObject *arg) { DIV };
+static PyObject * MixerVoice_inplace_div(MixerVoice *self, PyObject *arg) { INPLACE_DIV };
+
+static PyMemberDef MixerVoice_members[] = {
+    {"server", T_OBJECT_EX, offsetof(MixerVoice, server), 0, "Pyo server."},
+    {"stream", T_OBJECT_EX, offsetof(MixerVoice, stream), 0, "Stream object."},
+    {"mul", T_OBJECT_EX, offsetof(MixerVoice, mul), 0, "Mul factor."},
+    {"add", T_OBJECT_EX, offsetof(MixerVoice, add), 0, "Add factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyMethodDef MixerVoice_methods[] = {
+    {"getServer", (PyCFunction)MixerVoice_getServer, METH_NOARGS, "Returns server object."},
+    {"_getStream", (PyCFunction)MixerVoice_getStream, METH_NOARGS, "Returns stream object."},
+    {"deleteStream", (PyCFunction)MixerVoice_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
+    {"play", (PyCFunction)MixerVoice_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
+    {"out", (PyCFunction)MixerVoice_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
+    {"stop", (PyCFunction)MixerVoice_stop, METH_NOARGS, "Stops computing."},
+    {"setMul", (PyCFunction)MixerVoice_setMul, METH_O, "Sets MixerVoice mul factor."},
+    {"setAdd", (PyCFunction)MixerVoice_setAdd, METH_O, "Sets MixerVoice add factor."},
+    {"setSub", (PyCFunction)MixerVoice_setSub, METH_O, "Sets inverse add factor."},
+    {"setDiv", (PyCFunction)MixerVoice_setDiv, METH_O, "Sets inverse mul factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyNumberMethods MixerVoice_as_number = {
+    (binaryfunc)MixerVoice_add,                      /*nb_add*/
+    (binaryfunc)MixerVoice_sub,                 /*nb_subtract*/
+    (binaryfunc)MixerVoice_multiply,                 /*nb_multiply*/
+    (binaryfunc)MixerVoice_div,                   /*nb_divide*/
+    0,                /*nb_remainder*/
+    0,                   /*nb_divmod*/
+    0,                   /*nb_power*/
+    0,                  /*nb_neg*/
+    0,                /*nb_pos*/
+    0,                  /*(unaryfunc)array_abs,*/
+    0,                    /*nb_nonzero*/
+    0,                    /*nb_invert*/
+    0,               /*nb_lshift*/
+    0,              /*nb_rshift*/
+    0,              /*nb_and*/
+    0,              /*nb_xor*/
+    0,               /*nb_or*/
+    0,                                          /*nb_coerce*/
+    0,                       /*nb_int*/
+    0,                      /*nb_long*/
+    0,                     /*nb_float*/
+    0,                       /*nb_oct*/
+    0,                       /*nb_hex*/
+    (binaryfunc)MixerVoice_inplace_add,              /*inplace_add*/
+    (binaryfunc)MixerVoice_inplace_sub,         /*inplace_subtract*/
+    (binaryfunc)MixerVoice_inplace_multiply,         /*inplace_multiply*/
+    (binaryfunc)MixerVoice_inplace_div,           /*inplace_divide*/
+    0,        /*inplace_remainder*/
+    0,           /*inplace_power*/
+    0,       /*inplace_lshift*/
+    0,      /*inplace_rshift*/
+    0,      /*inplace_and*/
+    0,      /*inplace_xor*/
+    0,       /*inplace_or*/
+    0,             /*nb_floor_divide*/
+    0,              /*nb_true_divide*/
+    0,     /*nb_inplace_floor_divide*/
+    0,      /*nb_inplace_true_divide*/
+    0,                     /* nb_index */
+};
+
+PyTypeObject MixerVoiceType = {
+    PyObject_HEAD_INIT(NULL)
+    0,                         /*ob_size*/
+    "_pyo.MixerVoice_base",         /*tp_name*/
+    sizeof(MixerVoice),         /*tp_basicsize*/
+    0,                         /*tp_itemsize*/
+    (destructor)MixerVoice_dealloc, /*tp_dealloc*/
+    0,                         /*tp_print*/
+    0,                         /*tp_getattr*/
+    0,                         /*tp_setattr*/
+    0,                         /*tp_compare*/
+    0,                         /*tp_repr*/
+    &MixerVoice_as_number,             /*tp_as_number*/
+    0,                         /*tp_as_sequence*/
+    0,                         /*tp_as_mapping*/
+    0,                         /*tp_hash */
+    0,                         /*tp_call*/
+    0,                         /*tp_str*/
+    0,                         /*tp_getattro*/
+    0,                         /*tp_setattro*/
+    0,                         /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES,  /*tp_flags*/
+    "MixerVoice objects. Reads one band from a Mixer.",           /* tp_doc */
+    (traverseproc)MixerVoice_traverse,   /* tp_traverse */
+    (inquiry)MixerVoice_clear,           /* tp_clear */
+    0,		               /* tp_richcompare */
+    0,		               /* tp_weaklistoffset */
+    0,		               /* tp_iter */
+    0,		               /* tp_iternext */
+    MixerVoice_methods,             /* tp_methods */
+    MixerVoice_members,             /* tp_members */
+    0,                      /* tp_getset */
+    0,                         /* tp_base */
+    0,                         /* tp_dict */
+    0,                         /* tp_descr_get */
+    0,                         /* tp_descr_set */
+    0,                         /* tp_dictoffset */
+    (initproc)MixerVoice_init,      /* tp_init */
+    0,                         /* tp_alloc */
+    MixerVoice_new,                 /* tp_new */
 };

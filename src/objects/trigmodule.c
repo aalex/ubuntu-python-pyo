@@ -31,15 +31,372 @@ typedef struct {
     pyo_audio_HEAD
     PyObject *input;
     Stream *input_stream;
+    PyObject *max;
+    Stream *max_stream;
+    MYFLT value;
+    int modebuffer[3]; // need at least 2 slots for mul & add 
+} TrigRandInt;
+
+static void
+TrigRandInt_generate_i(TrigRandInt *self) {
+    int i;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    
+    for (i=0; i<self->bufsize; i++) {
+        if (in[i] == 1)
+            self->value = (MYFLT)((int)(rand()/((MYFLT)(RAND_MAX)+1)*ma));
+        
+        self->data[i] = self->value;
+    }
+}
+
+static void
+TrigRandInt_generate_a(TrigRandInt *self) {
+    int i;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
+    
+    for (i=0; i<self->bufsize; i++) {
+        if (in[i] == 1)
+            self->value = (MYFLT)((int)(rand()/((MYFLT)(RAND_MAX)+1)*ma[i]));
+        
+        self->data[i] = self->value;
+    }
+}
+
+static void TrigRandInt_postprocessing_ii(TrigRandInt *self) { POST_PROCESSING_II };
+static void TrigRandInt_postprocessing_ai(TrigRandInt *self) { POST_PROCESSING_AI };
+static void TrigRandInt_postprocessing_ia(TrigRandInt *self) { POST_PROCESSING_IA };
+static void TrigRandInt_postprocessing_aa(TrigRandInt *self) { POST_PROCESSING_AA };
+static void TrigRandInt_postprocessing_ireva(TrigRandInt *self) { POST_PROCESSING_IREVA };
+static void TrigRandInt_postprocessing_areva(TrigRandInt *self) { POST_PROCESSING_AREVA };
+static void TrigRandInt_postprocessing_revai(TrigRandInt *self) { POST_PROCESSING_REVAI };
+static void TrigRandInt_postprocessing_revaa(TrigRandInt *self) { POST_PROCESSING_REVAA };
+static void TrigRandInt_postprocessing_revareva(TrigRandInt *self) { POST_PROCESSING_REVAREVA };
+
+static void
+TrigRandInt_setProcMode(TrigRandInt *self)
+{
+    int procmode, muladdmode;
+    procmode = self->modebuffer[2];
+    muladdmode = self->modebuffer[0] + self->modebuffer[1] * 10;
+    
+	switch (procmode) {
+        case 0:    
+            self->proc_func_ptr = TrigRandInt_generate_i;
+            break;
+        case 1:    
+            self->proc_func_ptr = TrigRandInt_generate_a;
+            break;
+    } 
+	switch (muladdmode) {
+        case 0:        
+            self->muladd_func_ptr = TrigRandInt_postprocessing_ii;
+            break;
+        case 1:    
+            self->muladd_func_ptr = TrigRandInt_postprocessing_ai;
+            break;
+        case 2:    
+            self->muladd_func_ptr = TrigRandInt_postprocessing_revai;
+            break;
+        case 10:        
+            self->muladd_func_ptr = TrigRandInt_postprocessing_ia;
+            break;
+        case 11:    
+            self->muladd_func_ptr = TrigRandInt_postprocessing_aa;
+            break;
+        case 12:    
+            self->muladd_func_ptr = TrigRandInt_postprocessing_revaa;
+            break;
+        case 20:        
+            self->muladd_func_ptr = TrigRandInt_postprocessing_ireva;
+            break;
+        case 21:    
+            self->muladd_func_ptr = TrigRandInt_postprocessing_areva;
+            break;
+        case 22:    
+            self->muladd_func_ptr = TrigRandInt_postprocessing_revareva;
+            break;
+    }  
+}
+
+static void
+TrigRandInt_compute_next_data_frame(TrigRandInt *self)
+{
+    (*self->proc_func_ptr)(self); 
+    (*self->muladd_func_ptr)(self);
+    Stream_setData(self->stream, self->data);
+}
+
+static int
+TrigRandInt_traverse(TrigRandInt *self, visitproc visit, void *arg)
+{
+    pyo_VISIT
+    Py_VISIT(self->input);
+    Py_VISIT(self->input_stream);
+    Py_VISIT(self->max);    
+    Py_VISIT(self->max_stream);    
+    return 0;
+}
+
+static int 
+TrigRandInt_clear(TrigRandInt *self)
+{
+    pyo_CLEAR
+    Py_CLEAR(self->input);
+    Py_CLEAR(self->input_stream);
+    Py_CLEAR(self->max);    
+    Py_CLEAR(self->max_stream);    
+    return 0;
+}
+
+static void
+TrigRandInt_dealloc(TrigRandInt* self)
+{
+    free(self->data);
+    TrigRandInt_clear(self);
+    self->ob_type->tp_free((PyObject*)self);
+}
+
+static PyObject * TrigRandInt_deleteStream(TrigRandInt *self) { DELETE_STREAM };
+
+static PyObject *
+TrigRandInt_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    int i;
+    TrigRandInt *self;
+    self = (TrigRandInt *)type->tp_alloc(type, 0);
+    
+    self->max = PyFloat_FromDouble(100.);
+    self->value = 0.;
+	self->modebuffer[0] = 0;
+	self->modebuffer[1] = 0;
+	self->modebuffer[2] = 0;
+    
+    INIT_OBJECT_COMMON
+    Stream_setFunctionPtr(self->stream, TrigRandInt_compute_next_data_frame);
+    self->mode_func_ptr = TrigRandInt_setProcMode;
+    return (PyObject *)self;
+}
+
+static int
+TrigRandInt_init(TrigRandInt *self, PyObject *args, PyObject *kwds)
+{
+    MYFLT ma;
+    PyObject *inputtmp, *input_streamtmp, *maxtmp=NULL, *multmp=NULL, *addtmp=NULL;
+    
+    static char *kwlist[] = {"input", "max", "mul", "add", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O|OOO", kwlist, &inputtmp, &maxtmp, &multmp, &addtmp))
+        return -1; 
+    
+    INIT_INPUT_STREAM
+
+    if (maxtmp) {
+        PyObject_CallMethod((PyObject *)self, "setMax", "O", maxtmp);
+    }
+    
+    if (multmp) {
+        PyObject_CallMethod((PyObject *)self, "setMul", "O", multmp);
+    }
+    
+    if (addtmp) {
+        PyObject_CallMethod((PyObject *)self, "setAdd", "O", addtmp);
+    }
+    
+    Py_INCREF(self->stream);
+    PyObject_CallMethod(self->server, "addStream", "O", self->stream);
+    
+    srand((unsigned)(time(0)));
+    if (self->modebuffer[2] == 0)
+        ma = PyFloat_AS_DOUBLE(PyNumber_Float(self->max));
+    else
+        ma = Stream_getData((Stream *)self->max_stream)[0];
+    self->value = (MYFLT)((int)(rand()/((MYFLT)(RAND_MAX)+1)*ma));
+
+    (*self->mode_func_ptr)(self);
+    
+    Py_INCREF(self);
+    return 0;
+}
+
+static PyObject * TrigRandInt_getServer(TrigRandInt* self) { GET_SERVER };
+static PyObject * TrigRandInt_getStream(TrigRandInt* self) { GET_STREAM };
+static PyObject * TrigRandInt_setMul(TrigRandInt *self, PyObject *arg) { SET_MUL };	
+static PyObject * TrigRandInt_setAdd(TrigRandInt *self, PyObject *arg) { SET_ADD };	
+static PyObject * TrigRandInt_setSub(TrigRandInt *self, PyObject *arg) { SET_SUB };	
+static PyObject * TrigRandInt_setDiv(TrigRandInt *self, PyObject *arg) { SET_DIV };	
+
+static PyObject * TrigRandInt_play(TrigRandInt *self, PyObject *args, PyObject *kwds) { PLAY };
+static PyObject * TrigRandInt_out(TrigRandInt *self, PyObject *args, PyObject *kwds) { OUT };
+static PyObject * TrigRandInt_stop(TrigRandInt *self) { STOP };
+
+static PyObject * TrigRandInt_multiply(TrigRandInt *self, PyObject *arg) { MULTIPLY };
+static PyObject * TrigRandInt_inplace_multiply(TrigRandInt *self, PyObject *arg) { INPLACE_MULTIPLY };
+static PyObject * TrigRandInt_add(TrigRandInt *self, PyObject *arg) { ADD };
+static PyObject * TrigRandInt_inplace_add(TrigRandInt *self, PyObject *arg) { INPLACE_ADD };
+static PyObject * TrigRandInt_sub(TrigRandInt *self, PyObject *arg) { SUB };
+static PyObject * TrigRandInt_inplace_sub(TrigRandInt *self, PyObject *arg) { INPLACE_SUB };
+static PyObject * TrigRandInt_div(TrigRandInt *self, PyObject *arg) { DIV };
+static PyObject * TrigRandInt_inplace_div(TrigRandInt *self, PyObject *arg) { INPLACE_DIV };
+
+static PyObject *
+TrigRandInt_setMax(TrigRandInt *self, PyObject *arg)
+{
+	PyObject *tmp, *streamtmp;
+	
+	if (arg == NULL) {
+		Py_INCREF(Py_None);
+		return Py_None;
+	}
+    
+	int isNumber = PyNumber_Check(arg);
+	
+	tmp = arg;
+	Py_INCREF(tmp);
+	Py_DECREF(self->max);
+	if (isNumber == 1) {
+		self->max = PyNumber_Float(tmp);
+        self->modebuffer[2] = 0;
+	}
+	else {
+		self->max = tmp;
+        streamtmp = PyObject_CallMethod((PyObject *)self->max, "_getStream", NULL);
+        Py_INCREF(streamtmp);
+        Py_XDECREF(self->max_stream);
+        self->max_stream = (Stream *)streamtmp;
+		self->modebuffer[2] = 1;
+	}
+    
+    (*self->mode_func_ptr)(self);
+    
+	Py_INCREF(Py_None);
+	return Py_None;
+}	
+
+static PyMemberDef TrigRandInt_members[] = {
+    {"server", T_OBJECT_EX, offsetof(TrigRandInt, server), 0, "Pyo server."},
+    {"stream", T_OBJECT_EX, offsetof(TrigRandInt, stream), 0, "Stream object."},
+    {"input", T_OBJECT_EX, offsetof(TrigRandInt, input), 0, "Input sound object."},
+    {"max", T_OBJECT_EX, offsetof(TrigRandInt, max), 0, "Maximum possible value."},
+    {"mul", T_OBJECT_EX, offsetof(TrigRandInt, mul), 0, "Mul factor."},
+    {"add", T_OBJECT_EX, offsetof(TrigRandInt, add), 0, "Add factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyMethodDef TrigRandInt_methods[] = {
+    {"getServer", (PyCFunction)TrigRandInt_getServer, METH_NOARGS, "Returns server object."},
+    {"_getStream", (PyCFunction)TrigRandInt_getStream, METH_NOARGS, "Returns stream object."},
+    {"deleteStream", (PyCFunction)TrigRandInt_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
+    {"play", (PyCFunction)TrigRandInt_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
+    {"out", (PyCFunction)TrigRandInt_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
+    {"stop", (PyCFunction)TrigRandInt_stop, METH_NOARGS, "Stops computing."},
+    {"setMax", (PyCFunction)TrigRandInt_setMax, METH_O, "Sets maximum possible value."},
+    {"setMul", (PyCFunction)TrigRandInt_setMul, METH_O, "Sets oscillator mul factor."},
+    {"setAdd", (PyCFunction)TrigRandInt_setAdd, METH_O, "Sets oscillator add factor."},
+    {"setSub", (PyCFunction)TrigRandInt_setSub, METH_O, "Sets inverse add factor."},
+    {"setDiv", (PyCFunction)TrigRandInt_setDiv, METH_O, "Sets inverse mul factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyNumberMethods TrigRandInt_as_number = {
+    (binaryfunc)TrigRandInt_add,                         /*nb_add*/
+    (binaryfunc)TrigRandInt_sub,                         /*nb_subtract*/
+    (binaryfunc)TrigRandInt_multiply,                    /*nb_multiply*/
+    (binaryfunc)TrigRandInt_div,                                              /*nb_divide*/
+    0,                                              /*nb_remainder*/
+    0,                                              /*nb_divmod*/
+    0,                                              /*nb_power*/
+    0,                                              /*nb_neg*/
+    0,                                              /*nb_pos*/
+    0,                                              /*(unaryfunc)array_abs,*/
+    0,                                              /*nb_nonzero*/
+    0,                                              /*nb_invert*/
+    0,                                              /*nb_lshift*/
+    0,                                              /*nb_rshift*/
+    0,                                              /*nb_and*/
+    0,                                              /*nb_xor*/
+    0,                                              /*nb_or*/
+    0,                                              /*nb_coerce*/
+    0,                                              /*nb_int*/
+    0,                                              /*nb_long*/
+    0,                                              /*nb_float*/
+    0,                                              /*nb_oct*/
+    0,                                              /*nb_hex*/
+    (binaryfunc)TrigRandInt_inplace_add,                 /*inplace_add*/
+    (binaryfunc)TrigRandInt_inplace_sub,                 /*inplace_subtract*/
+    (binaryfunc)TrigRandInt_inplace_multiply,            /*inplace_multiply*/
+    (binaryfunc)TrigRandInt_inplace_div,                                              /*inplace_divide*/
+    0,                                              /*inplace_remainder*/
+    0,                                              /*inplace_power*/
+    0,                                              /*inplace_lshift*/
+    0,                                              /*inplace_rshift*/
+    0,                                              /*inplace_and*/
+    0,                                              /*inplace_xor*/
+    0,                                              /*inplace_or*/
+    0,                                              /*nb_floor_divide*/
+    0,                                              /*nb_true_divide*/
+    0,                                              /*nb_inplace_floor_divide*/
+    0,                                              /*nb_inplace_true_divide*/
+    0,                                              /* nb_index */
+};
+
+PyTypeObject TrigRandIntType = {
+    PyObject_HEAD_INIT(NULL)
+    0,                                              /*ob_size*/
+    "_pyo.TrigRandInt_base",                                   /*tp_name*/
+    sizeof(TrigRandInt),                                 /*tp_basicsize*/
+    0,                                              /*tp_itemsize*/
+    (destructor)TrigRandInt_dealloc,                     /*tp_dealloc*/
+    0,                                              /*tp_print*/
+    0,                                              /*tp_getattr*/
+    0,                                              /*tp_setattr*/
+    0,                                              /*tp_compare*/
+    0,                                              /*tp_repr*/
+    &TrigRandInt_as_number,                              /*tp_as_number*/
+    0,                                              /*tp_as_sequence*/
+    0,                                              /*tp_as_mapping*/
+    0,                                              /*tp_hash */
+    0,                                              /*tp_call*/
+    0,                                              /*tp_str*/
+    0,                                              /*tp_getattro*/
+    0,                                              /*tp_setattro*/
+    0,                                              /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES, /*tp_flags*/
+    "TrigRandInt objects. Generates a new random integer value on a trigger signal.",           /* tp_doc */
+    (traverseproc)TrigRandInt_traverse,                  /* tp_traverse */
+    (inquiry)TrigRandInt_clear,                          /* tp_clear */
+    0,                                              /* tp_richcompare */
+    0,                                              /* tp_weaklistoffset */
+    0,                                              /* tp_iter */
+    0,                                              /* tp_iternext */
+    TrigRandInt_methods,                                 /* tp_methods */
+    TrigRandInt_members,                                 /* tp_members */
+    0,                                              /* tp_getset */
+    0,                                              /* tp_base */
+    0,                                              /* tp_dict */
+    0,                                              /* tp_descr_get */
+    0,                                              /* tp_descr_set */
+    0,                                              /* tp_dictoffset */
+    (initproc)TrigRandInt_init,                          /* tp_init */
+    0,                                              /* tp_alloc */
+    TrigRandInt_new,                                     /* tp_new */
+};
+
+typedef struct {
+    pyo_audio_HEAD
+    PyObject *input;
+    Stream *input_stream;
     PyObject *min;
     PyObject *max;
     Stream *min_stream;
     Stream *max_stream;
-    float value;
-    float currentValue;
-    float time;
+    MYFLT value;
+    MYFLT currentValue;
+    MYFLT time;
     int timeStep;
-    float stepVal;
+    MYFLT stepVal;
     int timeCount;
     int modebuffer[4]; // need at least 2 slots for mul & add 
 } TrigRand;
@@ -47,15 +404,15 @@ typedef struct {
 static void
 TrigRand_generate_ii(TrigRand *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float mi = PyFloat_AS_DOUBLE(self->min);
-    float ma = PyFloat_AS_DOUBLE(self->max);
-    float range = ma - mi;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT mi = PyFloat_AS_DOUBLE(self->min);
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    MYFLT range = ma - mi;
     
     for (i=0; i<self->bufsize; i++) {
         if (in[i] == 1) {
             self->timeCount = 0;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi;
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi;
             if (self->time <= 0.0)
                 self->currentValue = self->value;
             else
@@ -78,15 +435,15 @@ TrigRand_generate_ii(TrigRand *self) {
 static void
 TrigRand_generate_ai(TrigRand *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *mi = Stream_getData((Stream *)self->min_stream);
-    float ma = PyFloat_AS_DOUBLE(self->max);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *mi = Stream_getData((Stream *)self->min_stream);
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
     
     for (i=0; i<self->bufsize; i++) {
-        float range = ma - mi[i];
+        MYFLT range = ma - mi[i];
         if (in[i] == 1) {
             self->timeCount = 0;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi[i];
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi[i];
             if (self->time <= 0.0)
                 self->currentValue = self->value;
             else
@@ -109,15 +466,15 @@ TrigRand_generate_ai(TrigRand *self) {
 static void
 TrigRand_generate_ia(TrigRand *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float mi = PyFloat_AS_DOUBLE(self->min);
-    float *ma = Stream_getData((Stream *)self->max_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT mi = PyFloat_AS_DOUBLE(self->min);
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
     
     for (i=0; i<self->bufsize; i++) {
-        float range = ma[i] - mi;
+        MYFLT range = ma[i] - mi;
         if (in[i] == 1) {
             self->timeCount = 0;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi;
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi;
             if (self->time <= 0.0)
                 self->currentValue = self->value;
             else
@@ -140,15 +497,15 @@ TrigRand_generate_ia(TrigRand *self) {
 static void
 TrigRand_generate_aa(TrigRand *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *mi = Stream_getData((Stream *)self->min_stream);
-    float *ma = Stream_getData((Stream *)self->max_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *mi = Stream_getData((Stream *)self->min_stream);
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
     
     for (i=0; i<self->bufsize; i++) {
-        float range = ma[i] - mi[i];
+        MYFLT range = ma[i] - mi[i];
         if (in[i] == 1) {
             self->timeCount = 0;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi[i];
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi[i];
             if (self->time <= 0.0)
                 self->currentValue = self->value;
             else
@@ -277,6 +634,7 @@ static PyObject * TrigRand_deleteStream(TrigRand *self) { DELETE_STREAM };
 static PyObject *
 TrigRand_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     TrigRand *self;
     self = (TrigRand *)type->tp_alloc(type, 0);
     
@@ -300,12 +658,12 @@ TrigRand_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 static int
 TrigRand_init(TrigRand *self, PyObject *args, PyObject *kwds)
 {
-    float inittmp = 0.0;
+    MYFLT inittmp = 0.0;
     PyObject *inputtmp, *input_streamtmp, *mintmp=NULL, *maxtmp=NULL, *multmp=NULL, *addtmp=NULL;
     
     static char *kwlist[] = {"input", "min", "max", "port", "init", "mul", "add", NULL};
     
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O|OOffOO", kwlist, &inputtmp, &mintmp, &maxtmp, &self->time, &inittmp, &multmp, &addtmp))
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, TYPE_O_OOFFOO, kwlist, &inputtmp, &mintmp, &maxtmp, &self->time, &inittmp, &multmp, &addtmp))
         return -1; 
     
     INIT_INPUT_STREAM
@@ -334,9 +692,7 @@ TrigRand_init(TrigRand *self, PyObject *args, PyObject *kwds)
     self->timeStep = (int)(self->time * self->sr);
 
     (*self->mode_func_ptr)(self);
-    
-    TrigRand_compute_next_data_frame((TrigRand *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -348,7 +704,7 @@ static PyObject * TrigRand_setAdd(TrigRand *self, PyObject *arg) { SET_ADD };
 static PyObject * TrigRand_setSub(TrigRand *self, PyObject *arg) { SET_SUB };	
 static PyObject * TrigRand_setDiv(TrigRand *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * TrigRand_play(TrigRand *self) { PLAY };
+static PyObject * TrigRand_play(TrigRand *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * TrigRand_out(TrigRand *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * TrigRand_stop(TrigRand *self) { STOP };
 
@@ -467,7 +823,7 @@ static PyMethodDef TrigRand_methods[] = {
 {"getServer", (PyCFunction)TrigRand_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)TrigRand_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)TrigRand_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)TrigRand_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)TrigRand_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"out", (PyCFunction)TrigRand_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)TrigRand_stop, METH_NOARGS, "Stops computing."},
 {"setMin", (PyCFunction)TrigRand_setMin, METH_O, "Sets minimum possible value."},
@@ -572,12 +928,12 @@ typedef struct {
     PyObject *input;
     Stream *input_stream;
     int chSize;
-    float *choice;
-    float value;
-    float currentValue;
-    float time;
+    MYFLT *choice;
+    MYFLT value;
+    MYFLT currentValue;
+    MYFLT time;
     int timeStep;
-    float stepVal;
+    MYFLT stepVal;
     int timeCount;
     int modebuffer[2]; // need at least 2 slots for mul & add 
 } TrigChoice;
@@ -585,12 +941,12 @@ typedef struct {
 static void
 TrigChoice_generate(TrigChoice *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
     for (i=0; i<self->bufsize; i++) {
         if (in[i] == 1) {
             self->timeCount = 0;
-            self->value = self->choice[(int)((rand()/((float)(RAND_MAX))) * self->chSize)];
+            self->value = self->choice[(int)((rand()/((MYFLT)(RAND_MAX))) * self->chSize)];
             if (self->time <= 0.0)
                 self->currentValue = self->value;
             else
@@ -699,6 +1055,7 @@ static PyObject * TrigChoice_deleteStream(TrigChoice *self) { DELETE_STREAM };
 static PyObject *
 TrigChoice_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     TrigChoice *self;
     self = (TrigChoice *)type->tp_alloc(type, 0);
     
@@ -718,12 +1075,12 @@ TrigChoice_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 static int
 TrigChoice_init(TrigChoice *self, PyObject *args, PyObject *kwds)
 {
-    float inittmp = 0.0;
+    MYFLT inittmp = 0.0;
     PyObject *inputtmp, *input_streamtmp, *choicetmp=NULL, *multmp=NULL, *addtmp=NULL;
     
     static char *kwlist[] = {"input", "choice", "port", "init", "mul", "add", NULL};
     
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "OO|ffOO", kwlist, &inputtmp, &choicetmp, &self->time, &inittmp, &multmp, &addtmp))
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, TYPE_OO_FFOO, kwlist, &inputtmp, &choicetmp, &self->time, &inittmp, &multmp, &addtmp))
         return -1; 
     
     INIT_INPUT_STREAM
@@ -748,9 +1105,7 @@ TrigChoice_init(TrigChoice *self, PyObject *args, PyObject *kwds)
     self->timeStep = (int)(self->time * self->sr);
     
     (*self->mode_func_ptr)(self);
-    
-    TrigChoice_compute_next_data_frame((TrigChoice *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -762,7 +1117,7 @@ static PyObject * TrigChoice_setAdd(TrigChoice *self, PyObject *arg) { SET_ADD }
 static PyObject * TrigChoice_setSub(TrigChoice *self, PyObject *arg) { SET_SUB };	
 static PyObject * TrigChoice_setDiv(TrigChoice *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * TrigChoice_play(TrigChoice *self) { PLAY };
+static PyObject * TrigChoice_play(TrigChoice *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * TrigChoice_out(TrigChoice *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * TrigChoice_stop(TrigChoice *self) { STOP };
 
@@ -789,7 +1144,7 @@ TrigChoice_setChoice(TrigChoice *self, PyObject *arg)
 
     tmp = arg;
     self->chSize = PyList_Size(tmp);
-    self->choice = (float *)realloc(self->choice, self->chSize * sizeof(float));
+    self->choice = (MYFLT *)realloc(self->choice, self->chSize * sizeof(MYFLT));
     for (i=0; i<self->chSize; i++) {
         self->choice[i] = PyFloat_AS_DOUBLE(PyNumber_Float(PyList_GET_ITEM(tmp, i)));
     }
@@ -836,7 +1191,7 @@ static PyMethodDef TrigChoice_methods[] = {
 {"getServer", (PyCFunction)TrigChoice_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)TrigChoice_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)TrigChoice_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)TrigChoice_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)TrigChoice_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"out", (PyCFunction)TrigChoice_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)TrigChoice_stop, METH_NOARGS, "Stops computing."},
 {"setChoice", (PyCFunction)TrigChoice_setChoice, METH_O, "Sets possible values."},
@@ -938,6 +1293,7 @@ TrigChoice_new,                                     /* tp_new */
 typedef struct {
     pyo_audio_HEAD
     PyObject *input;
+    PyObject *arg;
     Stream *input_stream;
     PyObject *func;
 } TrigFunc;
@@ -945,11 +1301,20 @@ typedef struct {
 static void
 TrigFunc_generate(TrigFunc *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    PyObject *tuple;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
     for (i=0; i<self->bufsize; i++) {
-        if (in[i] == 1)
-            PyObject_Call((PyObject *)self->func, PyTuple_New(0), NULL);
+        if (in[i] == 1) {
+            if (self->arg == Py_None)
+                PyObject_Call(self->func, PyTuple_New(0), NULL);
+            else {
+                tuple = PyTuple_New(1);
+                PyTuple_SET_ITEM(tuple, 0, self->arg);
+                PyObject_Call(self->func, tuple, NULL);                
+            }
+
+        }    
     }
 }
 
@@ -965,6 +1330,8 @@ TrigFunc_traverse(TrigFunc *self, visitproc visit, void *arg)
     pyo_VISIT
     Py_VISIT(self->input);
     Py_VISIT(self->input_stream);
+    Py_VISIT(self->func);
+    Py_VISIT(self->arg);
     return 0;
 }
 
@@ -974,6 +1341,8 @@ TrigFunc_clear(TrigFunc *self)
     pyo_CLEAR
     Py_CLEAR(self->input);
     Py_CLEAR(self->input_stream);
+    Py_CLEAR(self->func);
+    Py_CLEAR(self->arg);
     return 0;
 }
 
@@ -990,9 +1359,12 @@ static PyObject * TrigFunc_deleteStream(TrigFunc *self) { DELETE_STREAM };
 static PyObject *
 TrigFunc_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     TrigFunc *self;
     self = (TrigFunc *)type->tp_alloc(type, 0);
-    
+
+    self->arg = Py_None;
+
     INIT_OBJECT_COMMON
     Stream_setFunctionPtr(self->stream, TrigFunc_compute_next_data_frame);
     return (PyObject *)self;
@@ -1001,11 +1373,11 @@ TrigFunc_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 static int
 TrigFunc_init(TrigFunc *self, PyObject *args, PyObject *kwds)
 {
-    PyObject *inputtmp, *input_streamtmp, *functmp=NULL;
+    PyObject *inputtmp, *input_streamtmp, *functmp=NULL, *argtmp=NULL;
     
-    static char *kwlist[] = {"input", "function", NULL};
+    static char *kwlist[] = {"input", "function", "arg", NULL};
     
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "OO", kwlist, &inputtmp, &functmp))
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "OO|O", kwlist, &inputtmp, &functmp, &argtmp))
         return -1; 
     
     INIT_INPUT_STREAM
@@ -1014,10 +1386,12 @@ TrigFunc_init(TrigFunc *self, PyObject *args, PyObject *kwds)
         PyObject_CallMethod((PyObject *)self, "setFunction", "O", functmp);
     }
 
+    if (argtmp) {
+        PyObject_CallMethod((PyObject *)self, "setArg", "O", argtmp);
+    }
+    
     Py_INCREF(self->stream);
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
-
-    TrigFunc_compute_next_data_frame((TrigFunc *)self);
     
     Py_INCREF(self);
     return 0;
@@ -1026,7 +1400,7 @@ TrigFunc_init(TrigFunc *self, PyObject *args, PyObject *kwds)
 static PyObject * TrigFunc_getServer(TrigFunc* self) { GET_SERVER };
 static PyObject * TrigFunc_getStream(TrigFunc* self) { GET_STREAM };
 
-static PyObject * TrigFunc_play(TrigFunc *self) { PLAY };
+static PyObject * TrigFunc_play(TrigFunc *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * TrigFunc_stop(TrigFunc *self) { STOP };
 
 static PyObject *
@@ -1049,6 +1423,20 @@ TrigFunc_setFunction(TrigFunc *self, PyObject *arg)
 	return Py_None;
 }	
 
+static PyObject *
+TrigFunc_setArg(TrigFunc *self, PyObject *arg)
+{
+	PyObject *tmp;
+
+    tmp = arg;
+    Py_DECREF(self->arg);
+    Py_INCREF(tmp);
+    self->arg = tmp;
+    
+	Py_INCREF(Py_None);
+	return Py_None;
+}	
+
 static PyMemberDef TrigFunc_members[] = {
 {"server", T_OBJECT_EX, offsetof(TrigFunc, server), 0, "Pyo server."},
 {"stream", T_OBJECT_EX, offsetof(TrigFunc, stream), 0, "Stream object."},
@@ -1060,9 +1448,10 @@ static PyMethodDef TrigFunc_methods[] = {
 {"getServer", (PyCFunction)TrigFunc_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)TrigFunc_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)TrigFunc_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)TrigFunc_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)TrigFunc_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)TrigFunc_stop, METH_NOARGS, "Stops computing."},
 {"setFunction", (PyCFunction)TrigFunc_setFunction, METH_O, "Sets function to be called."},
+{"setArg", (PyCFunction)TrigFunc_setArg, METH_O, "Sets function's argument."},
 {NULL}  /* Sentinel */
 };
 
@@ -1120,28 +1509,28 @@ typedef struct {
     Stream *dur_stream;
     int modebuffer[3];
     int active;
-    float current_dur; // duration in samples
-    float inc; // table size / current_dur
+    MYFLT current_dur; // duration in samples
+    MYFLT inc; // table size / current_dur
     double pointerPos; // reading position in sample
-    float *trigsBuffer;
-    float *tempTrigsBuffer;
+    MYFLT *trigsBuffer;
+    MYFLT *tempTrigsBuffer;
     int interp; /* 0 = default to 2, 1 = nointerp, 2 = linear, 3 = cos, 4 = cubic */
-    float (*interp_func_ptr)(float *, int, float, int);
+    MYFLT (*interp_func_ptr)(MYFLT *, int, MYFLT, int);
 } TrigEnv;
 
 static void
 TrigEnv_readframes_i(TrigEnv *self) {
-    float fpart;
+    MYFLT fpart;
     int i, ipart;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *tablelist = TableStream_getData(self->table);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *tablelist = TableStream_getData(self->table);
     int size = TableStream_getSize(self->table);
     
     for (i=0; i<self->bufsize; i++) {
         if (in[i] == 1) {
-            float dur = PyFloat_AS_DOUBLE(self->dur);
+            MYFLT dur = PyFloat_AS_DOUBLE(self->dur);
             self->current_dur = self->sr * dur;
-            self->inc = (float)size / self->current_dur;
+            self->inc = (MYFLT)size / self->current_dur;
             self->active = 1;
             self->pointerPos = 0.;
         }
@@ -1163,18 +1552,18 @@ TrigEnv_readframes_i(TrigEnv *self) {
 
 static void
 TrigEnv_readframes_a(TrigEnv *self) {
-    float fpart;
+    MYFLT fpart;
     int i, ipart;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *dur_st = Stream_getData((Stream *)self->dur_stream);
-    float *tablelist = TableStream_getData(self->table);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *dur_st = Stream_getData((Stream *)self->dur_stream);
+    MYFLT *tablelist = TableStream_getData(self->table);
     int size = TableStream_getSize(self->table);
     
     for (i=0; i<self->bufsize; i++) {
         if (in[i] == 1) {
-            float dur = dur_st[i];
+            MYFLT dur = dur_st[i];
             self->current_dur = self->sr * dur;
-            self->inc = (float)size / self->current_dur;
+            self->inc = (MYFLT)size / self->current_dur;
             self->active = 1;
             self->pointerPos = 0.;
         }
@@ -1297,6 +1686,7 @@ static PyObject * TrigEnv_deleteStream(TrigEnv *self) { DELETE_STREAM };
 static PyObject *
 TrigEnv_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     TrigEnv *self;
     self = (TrigEnv *)type->tp_alloc(type, 0);
     
@@ -1349,8 +1739,8 @@ TrigEnv_init(TrigEnv *self, PyObject *args, PyObject *kwds)
     Py_INCREF(self->stream);
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
 
-    self->trigsBuffer = (float *)realloc(self->trigsBuffer, self->bufsize * sizeof(float));
-    self->tempTrigsBuffer = (float *)realloc(self->tempTrigsBuffer, self->bufsize * sizeof(float));
+    self->trigsBuffer = (MYFLT *)realloc(self->trigsBuffer, self->bufsize * sizeof(MYFLT));
+    self->tempTrigsBuffer = (MYFLT *)realloc(self->tempTrigsBuffer, self->bufsize * sizeof(MYFLT));
     
     for (i=0; i<self->bufsize; i++) {
         self->trigsBuffer[i] = 0.0;
@@ -1359,9 +1749,7 @@ TrigEnv_init(TrigEnv *self, PyObject *args, PyObject *kwds)
     (*self->mode_func_ptr)(self);
     
     SET_INTERP_POINTER
-    
-    TrigEnv_compute_next_data_frame((TrigEnv *)self);
-    
+
     Py_INCREF(self);
     return 0;
 }
@@ -1373,7 +1761,7 @@ static PyObject * TrigEnv_setAdd(TrigEnv *self, PyObject *arg) { SET_ADD };
 static PyObject * TrigEnv_setSub(TrigEnv *self, PyObject *arg) { SET_SUB };	
 static PyObject * TrigEnv_setDiv(TrigEnv *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * TrigEnv_play(TrigEnv *self) { PLAY };
+static PyObject * TrigEnv_play(TrigEnv *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * TrigEnv_out(TrigEnv *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * TrigEnv_stop(TrigEnv *self) { STOP };
 
@@ -1465,7 +1853,7 @@ TrigEnv_setInterp(TrigEnv *self, PyObject *arg)
     return Py_None;
 }
 
-float *
+MYFLT *
 TrigEnv_getTrigsBuffer(TrigEnv *self)
 {
     int i;
@@ -1473,7 +1861,7 @@ TrigEnv_getTrigsBuffer(TrigEnv *self)
         self->tempTrigsBuffer[i] = self->trigsBuffer[i];
         self->trigsBuffer[i] = 0.0;
     }    
-    return (float *)self->tempTrigsBuffer;
+    return (MYFLT *)self->tempTrigsBuffer;
 }    
 
 static PyMemberDef TrigEnv_members[] = {
@@ -1491,7 +1879,7 @@ static PyMethodDef TrigEnv_methods[] = {
 {"getServer", (PyCFunction)TrigEnv_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)TrigEnv_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)TrigEnv_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)TrigEnv_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)TrigEnv_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"out", (PyCFunction)TrigEnv_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)TrigEnv_stop, METH_NOARGS, "Stops computing."},
 {"setTable", (PyCFunction)TrigEnv_setTable, METH_O, "Sets envelope table."},
@@ -1594,17 +1982,65 @@ TrigEnv_new,                 /* tp_new */
 typedef struct {
     pyo_audio_HEAD
     TrigEnv *mainReader;
+    int modebuffer[2];
 } TrigEnvTrig;
+
+static void TrigEnvTrig_postprocessing_ii(TrigEnvTrig *self) { POST_PROCESSING_II };
+static void TrigEnvTrig_postprocessing_ai(TrigEnvTrig *self) { POST_PROCESSING_AI };
+static void TrigEnvTrig_postprocessing_ia(TrigEnvTrig *self) { POST_PROCESSING_IA };
+static void TrigEnvTrig_postprocessing_aa(TrigEnvTrig *self) { POST_PROCESSING_AA };
+static void TrigEnvTrig_postprocessing_ireva(TrigEnvTrig *self) { POST_PROCESSING_IREVA };
+static void TrigEnvTrig_postprocessing_areva(TrigEnvTrig *self) { POST_PROCESSING_AREVA };
+static void TrigEnvTrig_postprocessing_revai(TrigEnvTrig *self) { POST_PROCESSING_REVAI };
+static void TrigEnvTrig_postprocessing_revaa(TrigEnvTrig *self) { POST_PROCESSING_REVAA };
+static void TrigEnvTrig_postprocessing_revareva(TrigEnvTrig *self) { POST_PROCESSING_REVAREVA };
+
+static void
+TrigEnvTrig_setProcMode(TrigEnvTrig *self) {
+    int muladdmode;
+    muladdmode = self->modebuffer[0] + self->modebuffer[1] * 10;
+    
+    switch (muladdmode) {
+        case 0:        
+            self->muladd_func_ptr = TrigEnvTrig_postprocessing_ii;
+            break;
+        case 1:    
+            self->muladd_func_ptr = TrigEnvTrig_postprocessing_ai;
+            break;
+        case 2:    
+            self->muladd_func_ptr = TrigEnvTrig_postprocessing_revai;
+            break;
+        case 10:        
+            self->muladd_func_ptr = TrigEnvTrig_postprocessing_ia;
+            break;
+        case 11:    
+            self->muladd_func_ptr = TrigEnvTrig_postprocessing_aa;
+            break;
+        case 12:    
+            self->muladd_func_ptr = TrigEnvTrig_postprocessing_revaa;
+            break;
+        case 20:        
+            self->muladd_func_ptr = TrigEnvTrig_postprocessing_ireva;
+            break;
+        case 21:    
+            self->muladd_func_ptr = TrigEnvTrig_postprocessing_areva;
+            break;
+        case 22:    
+            self->muladd_func_ptr = TrigEnvTrig_postprocessing_revareva;
+            break;
+    }  
+}
 
 static void
 TrigEnvTrig_compute_next_data_frame(TrigEnvTrig *self)
 {
     int i;
-    float *tmp;
+    MYFLT *tmp;
     tmp = TrigEnv_getTrigsBuffer((TrigEnv *)self->mainReader);
     for (i=0; i<self->bufsize; i++) {
         self->data[i] = tmp[i];
     }    
+    (*self->muladd_func_ptr)(self);
     Stream_setData(self->stream, self->data);
 }
 
@@ -1637,11 +2073,16 @@ static PyObject * TrigEnvTrig_deleteStream(TrigEnvTrig *self) { DELETE_STREAM };
 static PyObject *
 TrigEnvTrig_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     TrigEnvTrig *self;
     self = (TrigEnvTrig *)type->tp_alloc(type, 0);
-    
+
+    self->modebuffer[0] = 0;
+    self->modebuffer[1] = 0;
+
     INIT_OBJECT_COMMON
     Stream_setFunctionPtr(self->stream, TrigEnvTrig_compute_next_data_frame);
+    self->mode_func_ptr = TrigEnvTrig_setProcMode;
     
     return (PyObject *)self;
 }
@@ -1662,8 +2103,8 @@ TrigEnvTrig_init(TrigEnvTrig *self, PyObject *args, PyObject *kwds)
     
     Py_INCREF(self->stream);
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
-    
-    TrigEnvTrig_compute_next_data_frame((TrigEnvTrig *)self);
+
+    (*self->mode_func_ptr)(self);
     
     Py_INCREF(self);
     return 0;
@@ -1671,13 +2112,28 @@ TrigEnvTrig_init(TrigEnvTrig *self, PyObject *args, PyObject *kwds)
 
 static PyObject * TrigEnvTrig_getServer(TrigEnvTrig* self) { GET_SERVER };
 static PyObject * TrigEnvTrig_getStream(TrigEnvTrig* self) { GET_STREAM };
+static PyObject * TrigEnvTrig_setMul(TrigEnvTrig *self, PyObject *arg) { SET_MUL };	
+static PyObject * TrigEnvTrig_setAdd(TrigEnvTrig *self, PyObject *arg) { SET_ADD };	
+static PyObject * TrigEnvTrig_setSub(TrigEnvTrig *self, PyObject *arg) { SET_SUB };	
+static PyObject * TrigEnvTrig_setDiv(TrigEnvTrig *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * TrigEnvTrig_play(TrigEnvTrig *self) { PLAY };
+static PyObject * TrigEnvTrig_play(TrigEnvTrig *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * TrigEnvTrig_stop(TrigEnvTrig *self) { STOP };
+
+static PyObject * TrigEnvTrig_multiply(TrigEnvTrig *self, PyObject *arg) { MULTIPLY };
+static PyObject * TrigEnvTrig_inplace_multiply(TrigEnvTrig *self, PyObject *arg) { INPLACE_MULTIPLY };
+static PyObject * TrigEnvTrig_add(TrigEnvTrig *self, PyObject *arg) { ADD };
+static PyObject * TrigEnvTrig_inplace_add(TrigEnvTrig *self, PyObject *arg) { INPLACE_ADD };
+static PyObject * TrigEnvTrig_sub(TrigEnvTrig *self, PyObject *arg) { SUB };
+static PyObject * TrigEnvTrig_inplace_sub(TrigEnvTrig *self, PyObject *arg) { INPLACE_SUB };
+static PyObject * TrigEnvTrig_div(TrigEnvTrig *self, PyObject *arg) { DIV };
+static PyObject * TrigEnvTrig_inplace_div(TrigEnvTrig *self, PyObject *arg) { INPLACE_DIV };
 
 static PyMemberDef TrigEnvTrig_members[] = {
 {"server", T_OBJECT_EX, offsetof(TrigEnvTrig, server), 0, "Pyo server."},
 {"stream", T_OBJECT_EX, offsetof(TrigEnvTrig, stream), 0, "Stream object."},
+{"mul", T_OBJECT_EX, offsetof(TrigEnvTrig, mul), 0, "Mul factor."},
+{"add", T_OBJECT_EX, offsetof(TrigEnvTrig, add), 0, "Add factor."},
 {NULL}  /* Sentinel */
 };
 
@@ -1685,9 +2141,54 @@ static PyMethodDef TrigEnvTrig_methods[] = {
 {"getServer", (PyCFunction)TrigEnvTrig_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)TrigEnvTrig_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)TrigEnvTrig_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)TrigEnvTrig_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)TrigEnvTrig_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)TrigEnvTrig_stop, METH_NOARGS, "Stops computing."},
+{"setMul", (PyCFunction)TrigEnvTrig_setMul, METH_O, "Sets oscillator mul factor."},
+{"setAdd", (PyCFunction)TrigEnvTrig_setAdd, METH_O, "Sets oscillator add factor."},
+{"setSub", (PyCFunction)TrigEnvTrig_setSub, METH_O, "Sets inverse add factor."},
+{"setDiv", (PyCFunction)TrigEnvTrig_setDiv, METH_O, "Sets inverse mul factor."},        
 {NULL}  /* Sentinel */
+};
+static PyNumberMethods TrigEnvTrig_as_number = {
+    (binaryfunc)TrigEnvTrig_add,                         /*nb_add*/
+    (binaryfunc)TrigEnvTrig_sub,                         /*nb_subtract*/
+    (binaryfunc)TrigEnvTrig_multiply,                    /*nb_multiply*/
+    (binaryfunc)TrigEnvTrig_div,                                              /*nb_divide*/
+    0,                                              /*nb_remainder*/
+    0,                                              /*nb_divmod*/
+    0,                                              /*nb_power*/
+    0,                                              /*nb_neg*/
+    0,                                              /*nb_pos*/
+    0,                                              /*(unaryfunc)array_abs,*/
+    0,                                              /*nb_nonzero*/
+    0,                                              /*nb_invert*/
+    0,                                              /*nb_lshift*/
+    0,                                              /*nb_rshift*/
+    0,                                              /*nb_and*/
+    0,                                              /*nb_xor*/
+    0,                                              /*nb_or*/
+    0,                                              /*nb_coerce*/
+    0,                                              /*nb_int*/
+    0,                                              /*nb_long*/
+    0,                                              /*nb_float*/
+    0,                                              /*nb_oct*/
+    0,                                              /*nb_hex*/
+    (binaryfunc)TrigEnvTrig_inplace_add,                 /*inplace_add*/
+    (binaryfunc)TrigEnvTrig_inplace_sub,                 /*inplace_subtract*/
+    (binaryfunc)TrigEnvTrig_inplace_multiply,            /*inplace_multiply*/
+    (binaryfunc)TrigEnvTrig_inplace_div,                                              /*inplace_divide*/
+    0,                                              /*inplace_remainder*/
+    0,                                              /*inplace_power*/
+    0,                                              /*inplace_lshift*/
+    0,                                              /*inplace_rshift*/
+    0,                                              /*inplace_and*/
+    0,                                              /*inplace_xor*/
+    0,                                              /*inplace_or*/
+    0,                                              /*nb_floor_divide*/
+    0,                                              /*nb_true_divide*/
+    0,                                              /*nb_inplace_floor_divide*/
+    0,                                              /*nb_inplace_true_divide*/
+    0,                                              /* nb_index */
 };
 
 PyTypeObject TrigEnvTrigType = {
@@ -1702,7 +2203,7 @@ sizeof(TrigEnvTrig),         /*tp_basicsize*/
 0,                         /*tp_setattr*/
 0,                         /*tp_compare*/
 0,                         /*tp_repr*/
-0,             /*tp_as_number*/
+&TrigEnvTrig_as_number,             /*tp_as_number*/
 0,                         /*tp_as_sequence*/
 0,                         /*tp_as_mapping*/
 0,                         /*tp_hash */
@@ -1742,17 +2243,17 @@ typedef struct {
     Stream *input_stream;
     int modebuffer[2];
     double currentTime;
-    float currentValue;
-    float sampleToSec;
-    float increment;
-    float *targets;
-    float *times;
+    double currentValue;
+    MYFLT sampleToSec;
+    double increment;
+    MYFLT *targets;
+    MYFLT *times;
     int which;
     int flag;
     int newlist;
     int listsize;
-    float *trigsBuffer;
-    float *tempTrigsBuffer;
+    MYFLT *trigsBuffer;
+    MYFLT *tempTrigsBuffer;
 } TrigLinseg;
 
 static void
@@ -1761,8 +2262,8 @@ TrigLinseg_convert_pointslist(TrigLinseg *self) {
     PyObject *tup;
     
     self->listsize = PyList_Size(self->pointslist);
-    self->targets = (float *)realloc(self->targets, self->listsize * sizeof(float));
-    self->times = (float *)realloc(self->times, self->listsize * sizeof(float));
+    self->targets = (MYFLT *)realloc(self->targets, self->listsize * sizeof(MYFLT));
+    self->times = (MYFLT *)realloc(self->times, self->listsize * sizeof(MYFLT));
     for (i=0; i<self->listsize; i++) {
         tup = PyList_GET_ITEM(self->pointslist, i);
         self->times[i] = PyFloat_AsDouble(PyNumber_Float(PyTuple_GET_ITEM(tup, 0)));
@@ -1785,7 +2286,7 @@ TrigLinseg_reinit(TrigLinseg *self) {
 static void
 TrigLinseg_generate(TrigLinseg *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
     for (i=0; i<self->bufsize; i++) {
         if (in[i] == 1)
@@ -1804,11 +2305,11 @@ TrigLinseg_generate(TrigLinseg *self) {
             }
             if (self->currentTime <= self->times[self->listsize-1])
                 self->currentValue += self->increment;            
-            self->data[i] = self->currentValue;
+            self->data[i] = (MYFLT)self->currentValue;
             self->currentTime += self->sampleToSec;    
         }
         else
-            self->data[i] = self->currentValue;
+            self->data[i] = (MYFLT)self->currentValue;
     }
 }
 
@@ -1900,6 +2401,7 @@ static PyObject * TrigLinseg_deleteStream(TrigLinseg *self) { DELETE_STREAM };
 static PyObject *
 TrigLinseg_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     TrigLinseg *self;
     self = (TrigLinseg *)type->tp_alloc(type, 0);
     
@@ -1945,8 +2447,8 @@ TrigLinseg_init(TrigLinseg *self, PyObject *args, PyObject *kwds)
     Py_INCREF(self->stream);
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
 
-    self->trigsBuffer = (float *)realloc(self->trigsBuffer, self->bufsize * sizeof(float));
-    self->tempTrigsBuffer = (float *)realloc(self->tempTrigsBuffer, self->bufsize * sizeof(float));
+    self->trigsBuffer = (MYFLT *)realloc(self->trigsBuffer, self->bufsize * sizeof(MYFLT));
+    self->tempTrigsBuffer = (MYFLT *)realloc(self->tempTrigsBuffer, self->bufsize * sizeof(MYFLT));
     
     for (i=0; i<self->bufsize; i++) {
         self->trigsBuffer[i] = 0.0;
@@ -1970,7 +2472,7 @@ static PyObject * TrigLinseg_setAdd(TrigLinseg *self, PyObject *arg) { SET_ADD }
 static PyObject * TrigLinseg_setSub(TrigLinseg *self, PyObject *arg) { SET_SUB };	
 static PyObject * TrigLinseg_setDiv(TrigLinseg *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * TrigLinseg_play(TrigLinseg *self) { PLAY };
+static PyObject * TrigLinseg_play(TrigLinseg *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * TrigLinseg_stop(TrigLinseg *self) { STOP };
 
 static PyObject * TrigLinseg_multiply(TrigLinseg *self, PyObject *arg) { MULTIPLY };
@@ -2005,7 +2507,7 @@ TrigLinseg_setList(TrigLinseg *self, PyObject *value)
     return Py_None;
 }
 
-float *
+MYFLT *
 TrigLinseg_getTrigsBuffer(TrigLinseg *self)
 {
     int i;
@@ -2013,7 +2515,7 @@ TrigLinseg_getTrigsBuffer(TrigLinseg *self)
         self->tempTrigsBuffer[i] = self->trigsBuffer[i];
         self->trigsBuffer[i] = 0.0;
     }    
-    return (float *)self->tempTrigsBuffer;
+    return (MYFLT *)self->tempTrigsBuffer;
 }    
 
 static PyMemberDef TrigLinseg_members[] = {
@@ -2029,7 +2531,7 @@ static PyMethodDef TrigLinseg_methods[] = {
 {"getServer", (PyCFunction)TrigLinseg_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)TrigLinseg_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)TrigLinseg_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)TrigLinseg_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)TrigLinseg_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)TrigLinseg_stop, METH_NOARGS, "Starts fadeout and stops computing."},
 {"setList", (PyCFunction)TrigLinseg_setList, METH_O, "Sets target points list."},
 {"setMul", (PyCFunction)TrigLinseg_setMul, METH_O, "Sets TrigLinseg mul factor."},
@@ -2129,17 +2631,65 @@ TrigLinseg_new,                 /* tp_new */
 typedef struct {
     pyo_audio_HEAD
     TrigLinseg *mainReader;
+    int modebuffer[2];
 } TrigLinsegTrig;
+
+static void TrigLinsegTrig_postprocessing_ii(TrigLinsegTrig *self) { POST_PROCESSING_II };
+static void TrigLinsegTrig_postprocessing_ai(TrigLinsegTrig *self) { POST_PROCESSING_AI };
+static void TrigLinsegTrig_postprocessing_ia(TrigLinsegTrig *self) { POST_PROCESSING_IA };
+static void TrigLinsegTrig_postprocessing_aa(TrigLinsegTrig *self) { POST_PROCESSING_AA };
+static void TrigLinsegTrig_postprocessing_ireva(TrigLinsegTrig *self) { POST_PROCESSING_IREVA };
+static void TrigLinsegTrig_postprocessing_areva(TrigLinsegTrig *self) { POST_PROCESSING_AREVA };
+static void TrigLinsegTrig_postprocessing_revai(TrigLinsegTrig *self) { POST_PROCESSING_REVAI };
+static void TrigLinsegTrig_postprocessing_revaa(TrigLinsegTrig *self) { POST_PROCESSING_REVAA };
+static void TrigLinsegTrig_postprocessing_revareva(TrigLinsegTrig *self) { POST_PROCESSING_REVAREVA };
+
+static void
+TrigLinsegTrig_setProcMode(TrigLinsegTrig *self) {
+    int muladdmode;
+    muladdmode = self->modebuffer[0] + self->modebuffer[1] * 10;
+    
+    switch (muladdmode) {
+        case 0:        
+            self->muladd_func_ptr = TrigLinsegTrig_postprocessing_ii;
+            break;
+        case 1:    
+            self->muladd_func_ptr = TrigLinsegTrig_postprocessing_ai;
+            break;
+        case 2:    
+            self->muladd_func_ptr = TrigLinsegTrig_postprocessing_revai;
+            break;
+        case 10:        
+            self->muladd_func_ptr = TrigLinsegTrig_postprocessing_ia;
+            break;
+        case 11:    
+            self->muladd_func_ptr = TrigLinsegTrig_postprocessing_aa;
+            break;
+        case 12:    
+            self->muladd_func_ptr = TrigLinsegTrig_postprocessing_revaa;
+            break;
+        case 20:        
+            self->muladd_func_ptr = TrigLinsegTrig_postprocessing_ireva;
+            break;
+        case 21:    
+            self->muladd_func_ptr = TrigLinsegTrig_postprocessing_areva;
+            break;
+        case 22:    
+            self->muladd_func_ptr = TrigLinsegTrig_postprocessing_revareva;
+            break;
+    }  
+}
 
 static void
 TrigLinsegTrig_compute_next_data_frame(TrigLinsegTrig *self)
 {
     int i;
-    float *tmp;
+    MYFLT *tmp;
     tmp = TrigLinseg_getTrigsBuffer((TrigLinseg *)self->mainReader);
     for (i=0; i<self->bufsize; i++) {
         self->data[i] = tmp[i];
     }    
+    (*self->muladd_func_ptr)(self);
     Stream_setData(self->stream, self->data);
 }
 
@@ -2172,11 +2722,16 @@ static PyObject * TrigLinsegTrig_deleteStream(TrigLinsegTrig *self) { DELETE_STR
 static PyObject *
 TrigLinsegTrig_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     TrigLinsegTrig *self;
     self = (TrigLinsegTrig *)type->tp_alloc(type, 0);
-    
+
+    self->modebuffer[0] = 0;
+    self->modebuffer[1] = 0;
+
     INIT_OBJECT_COMMON
     Stream_setFunctionPtr(self->stream, TrigLinsegTrig_compute_next_data_frame);
+    self->mode_func_ptr = TrigLinsegTrig_setProcMode;
     
     return (PyObject *)self;
 }
@@ -2198,21 +2753,36 @@ TrigLinsegTrig_init(TrigLinsegTrig *self, PyObject *args, PyObject *kwds)
     Py_INCREF(self->stream);
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
-    TrigLinsegTrig_compute_next_data_frame((TrigLinsegTrig *)self);
-    
+    (*self->mode_func_ptr)(self);
+        
     Py_INCREF(self);
     return 0;
 }
 
 static PyObject * TrigLinsegTrig_getServer(TrigLinsegTrig* self) { GET_SERVER };
 static PyObject * TrigLinsegTrig_getStream(TrigLinsegTrig* self) { GET_STREAM };
+static PyObject * TrigLinsegTrig_setMul(TrigLinsegTrig *self, PyObject *arg) { SET_MUL };	
+static PyObject * TrigLinsegTrig_setAdd(TrigLinsegTrig *self, PyObject *arg) { SET_ADD };	
+static PyObject * TrigLinsegTrig_setSub(TrigLinsegTrig *self, PyObject *arg) { SET_SUB };	
+static PyObject * TrigLinsegTrig_setDiv(TrigLinsegTrig *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * TrigLinsegTrig_play(TrigLinsegTrig *self) { PLAY };
+static PyObject * TrigLinsegTrig_play(TrigLinsegTrig *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * TrigLinsegTrig_stop(TrigLinsegTrig *self) { STOP };
+
+static PyObject * TrigLinsegTrig_multiply(TrigLinsegTrig *self, PyObject *arg) { MULTIPLY };
+static PyObject * TrigLinsegTrig_inplace_multiply(TrigLinsegTrig *self, PyObject *arg) { INPLACE_MULTIPLY };
+static PyObject * TrigLinsegTrig_add(TrigLinsegTrig *self, PyObject *arg) { ADD };
+static PyObject * TrigLinsegTrig_inplace_add(TrigLinsegTrig *self, PyObject *arg) { INPLACE_ADD };
+static PyObject * TrigLinsegTrig_sub(TrigLinsegTrig *self, PyObject *arg) { SUB };
+static PyObject * TrigLinsegTrig_inplace_sub(TrigLinsegTrig *self, PyObject *arg) { INPLACE_SUB };
+static PyObject * TrigLinsegTrig_div(TrigLinsegTrig *self, PyObject *arg) { DIV };
+static PyObject * TrigLinsegTrig_inplace_div(TrigLinsegTrig *self, PyObject *arg) { INPLACE_DIV };
 
 static PyMemberDef TrigLinsegTrig_members[] = {
 {"server", T_OBJECT_EX, offsetof(TrigLinsegTrig, server), 0, "Pyo server."},
 {"stream", T_OBJECT_EX, offsetof(TrigLinsegTrig, stream), 0, "Stream object."},
+{"mul", T_OBJECT_EX, offsetof(TrigLinsegTrig, mul), 0, "Mul factor."},
+{"add", T_OBJECT_EX, offsetof(TrigLinsegTrig, add), 0, "Add factor."},
 {NULL}  /* Sentinel */
 };
 
@@ -2220,9 +2790,55 @@ static PyMethodDef TrigLinsegTrig_methods[] = {
 {"getServer", (PyCFunction)TrigLinsegTrig_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)TrigLinsegTrig_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)TrigLinsegTrig_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)TrigLinsegTrig_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)TrigLinsegTrig_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)TrigLinsegTrig_stop, METH_NOARGS, "Stops computing."},
+{"setMul", (PyCFunction)TrigLinsegTrig_setMul, METH_O, "Sets oscillator mul factor."},
+{"setAdd", (PyCFunction)TrigLinsegTrig_setAdd, METH_O, "Sets oscillator add factor."},
+{"setSub", (PyCFunction)TrigLinsegTrig_setSub, METH_O, "Sets inverse add factor."},
+{"setDiv", (PyCFunction)TrigLinsegTrig_setDiv, METH_O, "Sets inverse mul factor."},        
 {NULL}  /* Sentinel */
+};
+
+static PyNumberMethods TrigLinsegTrig_as_number = {
+    (binaryfunc)TrigLinsegTrig_add,                         /*nb_add*/
+    (binaryfunc)TrigLinsegTrig_sub,                         /*nb_subtract*/
+    (binaryfunc)TrigLinsegTrig_multiply,                    /*nb_multiply*/
+    (binaryfunc)TrigLinsegTrig_div,                                              /*nb_divide*/
+    0,                                              /*nb_remainder*/
+    0,                                              /*nb_divmod*/
+    0,                                              /*nb_power*/
+    0,                                              /*nb_neg*/
+    0,                                              /*nb_pos*/
+    0,                                              /*(unaryfunc)array_abs,*/
+    0,                                              /*nb_nonzero*/
+    0,                                              /*nb_invert*/
+    0,                                              /*nb_lshift*/
+    0,                                              /*nb_rshift*/
+    0,                                              /*nb_and*/
+    0,                                              /*nb_xor*/
+    0,                                              /*nb_or*/
+    0,                                              /*nb_coerce*/
+    0,                                              /*nb_int*/
+    0,                                              /*nb_long*/
+    0,                                              /*nb_float*/
+    0,                                              /*nb_oct*/
+    0,                                              /*nb_hex*/
+    (binaryfunc)TrigLinsegTrig_inplace_add,                 /*inplace_add*/
+    (binaryfunc)TrigLinsegTrig_inplace_sub,                 /*inplace_subtract*/
+    (binaryfunc)TrigLinsegTrig_inplace_multiply,            /*inplace_multiply*/
+    (binaryfunc)TrigLinsegTrig_inplace_div,                                              /*inplace_divide*/
+    0,                                              /*inplace_remainder*/
+    0,                                              /*inplace_power*/
+    0,                                              /*inplace_lshift*/
+    0,                                              /*inplace_rshift*/
+    0,                                              /*inplace_and*/
+    0,                                              /*inplace_xor*/
+    0,                                              /*inplace_or*/
+    0,                                              /*nb_floor_divide*/
+    0,                                              /*nb_true_divide*/
+    0,                                              /*nb_inplace_floor_divide*/
+    0,                                              /*nb_inplace_true_divide*/
+    0,                                              /* nb_index */
 };
 
 PyTypeObject TrigLinsegTrigType = {
@@ -2237,7 +2853,7 @@ sizeof(TrigLinsegTrig),         /*tp_basicsize*/
 0,                         /*tp_setattr*/
 0,                         /*tp_compare*/
 0,                         /*tp_repr*/
-0,             /*tp_as_number*/
+&TrigLinsegTrig_as_number,             /*tp_as_number*/
 0,                         /*tp_as_sequence*/
 0,                         /*tp_as_mapping*/
 0,                         /*tp_hash */
@@ -2277,24 +2893,24 @@ typedef struct {
     Stream *input_stream;
     int modebuffer[2];
     double currentTime;
-    float currentValue;
-    float sampleToSec;
-    float inc;
-    float pointer;
-    float range;
-    float steps;
-    float *targets;
-    float *times;
+    double currentValue;
+    MYFLT sampleToSec;
+    double inc;
+    double pointer;
+    MYFLT range;
+    double steps;
+    MYFLT *targets;
+    MYFLT *times;
     int which;
     int flag;
     int newlist;
     int listsize;
-    float exp;
-    float exp_tmp;
+    double exp;
+    double exp_tmp;
     int inverse;
     int inverse_tmp;    
-    float *trigsBuffer;
-    float *tempTrigsBuffer;
+    MYFLT *trigsBuffer;
+    MYFLT *tempTrigsBuffer;
 } TrigExpseg;
 
 static void
@@ -2303,8 +2919,8 @@ TrigExpseg_convert_pointslist(TrigExpseg *self) {
     PyObject *tup;
     
     self->listsize = PyList_Size(self->pointslist);
-    self->targets = (float *)realloc(self->targets, self->listsize * sizeof(float));
-    self->times = (float *)realloc(self->times, self->listsize * sizeof(float));
+    self->targets = (MYFLT *)realloc(self->targets, self->listsize * sizeof(MYFLT));
+    self->times = (MYFLT *)realloc(self->times, self->listsize * sizeof(MYFLT));
     for (i=0; i<self->listsize; i++) {
         tup = PyList_GET_ITEM(self->pointslist, i);
         self->times[i] = PyFloat_AsDouble(PyNumber_Float(PyTuple_GET_ITEM(tup, 0)));
@@ -2329,8 +2945,8 @@ TrigExpseg_reinit(TrigExpseg *self) {
 static void
 TrigExpseg_generate(TrigExpseg *self) {
     int i;
-    float scl;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT scl;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
     for (i=0; i<self->bufsize; i++) {
         if (in[i] == 1)
@@ -2355,18 +2971,18 @@ TrigExpseg_generate(TrigExpseg *self) {
                 if (self->pointer > 1.0)
                     self->pointer = 1.0;
                 if (self->inverse == 1 && self->range < 0.0)
-                    scl = 1.0 - powf(1.0 - self->pointer, self->exp);
+                    scl = 1.0 - MYPOW(1.0 - self->pointer, self->exp);
                 else
-                    scl = powf(self->pointer, self->exp);
+                    scl = MYPOW(self->pointer, self->exp);
                 
                 self->currentValue = scl * self->range + self->targets[self->which-1];
                 self->pointer += self->inc;
             } 
-            self->data[i] = self->currentValue;
+            self->data[i] = (MYFLT)self->currentValue;
             self->currentTime += self->sampleToSec;    
         }
         else
-            self->data[i] = self->currentValue;
+            self->data[i] = (MYFLT)self->currentValue;
     }
 }
 
@@ -2461,6 +3077,7 @@ static PyObject * TrigExpseg_deleteStream(TrigExpseg *self) { DELETE_STREAM };
 static PyObject *
 TrigExpseg_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     TrigExpseg *self;
     self = (TrigExpseg *)type->tp_alloc(type, 0);
     
@@ -2487,7 +3104,7 @@ TrigExpseg_init(TrigExpseg *self, PyObject *args, PyObject *kwds)
     
     static char *kwlist[] = {"input", "list", "exp", "inverse", "mul", "add", NULL};
     
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "OO|fiOO", kwlist, &inputtmp, &pointslist, &self->exp_tmp, &self->inverse_tmp, &multmp, &addtmp))
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "OO|diOO", kwlist, &inputtmp, &pointslist, &self->exp_tmp, &self->inverse_tmp, &multmp, &addtmp))
         return -1; 
     
     INIT_INPUT_STREAM
@@ -2508,8 +3125,8 @@ TrigExpseg_init(TrigExpseg *self, PyObject *args, PyObject *kwds)
     Py_INCREF(self->stream);
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
-    self->trigsBuffer = (float *)realloc(self->trigsBuffer, self->bufsize * sizeof(float));
-    self->tempTrigsBuffer = (float *)realloc(self->tempTrigsBuffer, self->bufsize * sizeof(float));
+    self->trigsBuffer = (MYFLT *)realloc(self->trigsBuffer, self->bufsize * sizeof(MYFLT));
+    self->tempTrigsBuffer = (MYFLT *)realloc(self->tempTrigsBuffer, self->bufsize * sizeof(MYFLT));
     
     for (i=0; i<self->bufsize; i++) {
         self->trigsBuffer[i] = 0.0;
@@ -2533,7 +3150,7 @@ static PyObject * TrigExpseg_setAdd(TrigExpseg *self, PyObject *arg) { SET_ADD }
 static PyObject * TrigExpseg_setSub(TrigExpseg *self, PyObject *arg) { SET_SUB };	
 static PyObject * TrigExpseg_setDiv(TrigExpseg *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * TrigExpseg_play(TrigExpseg *self) { PLAY };
+static PyObject * TrigExpseg_play(TrigExpseg *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * TrigExpseg_stop(TrigExpseg *self) { STOP };
 
 static PyObject * TrigExpseg_multiply(TrigExpseg *self, PyObject *arg) { MULTIPLY };
@@ -2596,7 +3213,7 @@ TrigExpseg_setInverse(TrigExpseg *self, PyObject *arg)
     return Py_None;
 }
 
-float *
+MYFLT *
 TrigExpseg_getTrigsBuffer(TrigExpseg *self)
 {
     int i;
@@ -2604,7 +3221,7 @@ TrigExpseg_getTrigsBuffer(TrigExpseg *self)
         self->tempTrigsBuffer[i] = self->trigsBuffer[i];
         self->trigsBuffer[i] = 0.0;
     }    
-    return (float *)self->tempTrigsBuffer;
+    return (MYFLT *)self->tempTrigsBuffer;
 }    
 
 static PyMemberDef TrigExpseg_members[] = {
@@ -2620,7 +3237,7 @@ static PyMethodDef TrigExpseg_methods[] = {
 {"getServer", (PyCFunction)TrigExpseg_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)TrigExpseg_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)TrigExpseg_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)TrigExpseg_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)TrigExpseg_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)TrigExpseg_stop, METH_NOARGS, "Starts fadeout and stops computing."},
 {"setList", (PyCFunction)TrigExpseg_setList, METH_O, "Sets target points list."},
 {"setExp", (PyCFunction)TrigExpseg_setExp, METH_O, "Sets exponent factor."},
@@ -2722,17 +3339,65 @@ TrigExpseg_new,                 /* tp_new */
 typedef struct {
     pyo_audio_HEAD
     TrigExpseg *mainReader;
+    int modebuffer[2];
 } TrigExpsegTrig;
+
+static void TrigExpsegTrig_postprocessing_ii(TrigExpsegTrig *self) { POST_PROCESSING_II };
+static void TrigExpsegTrig_postprocessing_ai(TrigExpsegTrig *self) { POST_PROCESSING_AI };
+static void TrigExpsegTrig_postprocessing_ia(TrigExpsegTrig *self) { POST_PROCESSING_IA };
+static void TrigExpsegTrig_postprocessing_aa(TrigExpsegTrig *self) { POST_PROCESSING_AA };
+static void TrigExpsegTrig_postprocessing_ireva(TrigExpsegTrig *self) { POST_PROCESSING_IREVA };
+static void TrigExpsegTrig_postprocessing_areva(TrigExpsegTrig *self) { POST_PROCESSING_AREVA };
+static void TrigExpsegTrig_postprocessing_revai(TrigExpsegTrig *self) { POST_PROCESSING_REVAI };
+static void TrigExpsegTrig_postprocessing_revaa(TrigExpsegTrig *self) { POST_PROCESSING_REVAA };
+static void TrigExpsegTrig_postprocessing_revareva(TrigExpsegTrig *self) { POST_PROCESSING_REVAREVA };
+
+static void
+TrigExpsegTrig_setProcMode(TrigExpsegTrig *self) {
+    int muladdmode;
+    muladdmode = self->modebuffer[0] + self->modebuffer[1] * 10;
+    
+    switch (muladdmode) {
+        case 0:        
+            self->muladd_func_ptr = TrigExpsegTrig_postprocessing_ii;
+            break;
+        case 1:    
+            self->muladd_func_ptr = TrigExpsegTrig_postprocessing_ai;
+            break;
+        case 2:    
+            self->muladd_func_ptr = TrigExpsegTrig_postprocessing_revai;
+            break;
+        case 10:        
+            self->muladd_func_ptr = TrigExpsegTrig_postprocessing_ia;
+            break;
+        case 11:    
+            self->muladd_func_ptr = TrigExpsegTrig_postprocessing_aa;
+            break;
+        case 12:    
+            self->muladd_func_ptr = TrigExpsegTrig_postprocessing_revaa;
+            break;
+        case 20:        
+            self->muladd_func_ptr = TrigExpsegTrig_postprocessing_ireva;
+            break;
+        case 21:    
+            self->muladd_func_ptr = TrigExpsegTrig_postprocessing_areva;
+            break;
+        case 22:    
+            self->muladd_func_ptr = TrigExpsegTrig_postprocessing_revareva;
+            break;
+    }  
+}
 
 static void
 TrigExpsegTrig_compute_next_data_frame(TrigExpsegTrig *self)
 {
     int i;
-    float *tmp;
+    MYFLT *tmp;
     tmp = TrigExpseg_getTrigsBuffer((TrigExpseg *)self->mainReader);
     for (i=0; i<self->bufsize; i++) {
         self->data[i] = tmp[i];
     }    
+    (*self->muladd_func_ptr)(self);
     Stream_setData(self->stream, self->data);
 }
 
@@ -2765,11 +3430,16 @@ static PyObject * TrigExpsegTrig_deleteStream(TrigExpsegTrig *self) { DELETE_STR
 static PyObject *
 TrigExpsegTrig_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     TrigExpsegTrig *self;
     self = (TrigExpsegTrig *)type->tp_alloc(type, 0);
     
+    self->modebuffer[0] = 0;
+    self->modebuffer[1] = 0;
+
     INIT_OBJECT_COMMON
     Stream_setFunctionPtr(self->stream, TrigExpsegTrig_compute_next_data_frame);
+    self->mode_func_ptr = TrigExpsegTrig_setProcMode;
     
     return (PyObject *)self;
 }
@@ -2791,21 +3461,36 @@ TrigExpsegTrig_init(TrigExpsegTrig *self, PyObject *args, PyObject *kwds)
     Py_INCREF(self->stream);
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
-    TrigExpsegTrig_compute_next_data_frame((TrigExpsegTrig *)self);
-    
+    (*self->mode_func_ptr)(self);
+        
     Py_INCREF(self);
     return 0;
 }
 
 static PyObject * TrigExpsegTrig_getServer(TrigExpsegTrig* self) { GET_SERVER };
 static PyObject * TrigExpsegTrig_getStream(TrigExpsegTrig* self) { GET_STREAM };
+static PyObject * TrigExpsegTrig_setMul(TrigExpsegTrig *self, PyObject *arg) { SET_MUL };	
+static PyObject * TrigExpsegTrig_setAdd(TrigExpsegTrig *self, PyObject *arg) { SET_ADD };	
+static PyObject * TrigExpsegTrig_setSub(TrigExpsegTrig *self, PyObject *arg) { SET_SUB };	
+static PyObject * TrigExpsegTrig_setDiv(TrigExpsegTrig *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * TrigExpsegTrig_play(TrigExpsegTrig *self) { PLAY };
+static PyObject * TrigExpsegTrig_play(TrigExpsegTrig *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * TrigExpsegTrig_stop(TrigExpsegTrig *self) { STOP };
+
+static PyObject * TrigExpsegTrig_multiply(TrigExpsegTrig *self, PyObject *arg) { MULTIPLY };
+static PyObject * TrigExpsegTrig_inplace_multiply(TrigExpsegTrig *self, PyObject *arg) { INPLACE_MULTIPLY };
+static PyObject * TrigExpsegTrig_add(TrigExpsegTrig *self, PyObject *arg) { ADD };
+static PyObject * TrigExpsegTrig_inplace_add(TrigExpsegTrig *self, PyObject *arg) { INPLACE_ADD };
+static PyObject * TrigExpsegTrig_sub(TrigExpsegTrig *self, PyObject *arg) { SUB };
+static PyObject * TrigExpsegTrig_inplace_sub(TrigExpsegTrig *self, PyObject *arg) { INPLACE_SUB };
+static PyObject * TrigExpsegTrig_div(TrigExpsegTrig *self, PyObject *arg) { DIV };
+static PyObject * TrigExpsegTrig_inplace_div(TrigExpsegTrig *self, PyObject *arg) { INPLACE_DIV };
 
 static PyMemberDef TrigExpsegTrig_members[] = {
 {"server", T_OBJECT_EX, offsetof(TrigExpsegTrig, server), 0, "Pyo server."},
 {"stream", T_OBJECT_EX, offsetof(TrigExpsegTrig, stream), 0, "Stream object."},
+{"mul", T_OBJECT_EX, offsetof(TrigExpsegTrig, mul), 0, "Mul factor."},
+{"add", T_OBJECT_EX, offsetof(TrigExpsegTrig, add), 0, "Add factor."},
 {NULL}  /* Sentinel */
 };
 
@@ -2813,9 +3498,55 @@ static PyMethodDef TrigExpsegTrig_methods[] = {
 {"getServer", (PyCFunction)TrigExpsegTrig_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)TrigExpsegTrig_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)TrigExpsegTrig_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)TrigExpsegTrig_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)TrigExpsegTrig_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)TrigExpsegTrig_stop, METH_NOARGS, "Stops computing."},
+{"setMul", (PyCFunction)TrigExpsegTrig_setMul, METH_O, "Sets oscillator mul factor."},
+{"setAdd", (PyCFunction)TrigExpsegTrig_setAdd, METH_O, "Sets oscillator add factor."},
+{"setSub", (PyCFunction)TrigExpsegTrig_setSub, METH_O, "Sets inverse add factor."},
+{"setDiv", (PyCFunction)TrigExpsegTrig_setDiv, METH_O, "Sets inverse mul factor."},        
 {NULL}  /* Sentinel */
+};
+
+static PyNumberMethods TrigExpsegTrig_as_number = {
+    (binaryfunc)TrigExpsegTrig_add,                         /*nb_add*/
+    (binaryfunc)TrigExpsegTrig_sub,                         /*nb_subtract*/
+    (binaryfunc)TrigExpsegTrig_multiply,                    /*nb_multiply*/
+    (binaryfunc)TrigExpsegTrig_div,                                              /*nb_divide*/
+    0,                                              /*nb_remainder*/
+    0,                                              /*nb_divmod*/
+    0,                                              /*nb_power*/
+    0,                                              /*nb_neg*/
+    0,                                              /*nb_pos*/
+    0,                                              /*(unaryfunc)array_abs,*/
+    0,                                              /*nb_nonzero*/
+    0,                                              /*nb_invert*/
+    0,                                              /*nb_lshift*/
+    0,                                              /*nb_rshift*/
+    0,                                              /*nb_and*/
+    0,                                              /*nb_xor*/
+    0,                                              /*nb_or*/
+    0,                                              /*nb_coerce*/
+    0,                                              /*nb_int*/
+    0,                                              /*nb_long*/
+    0,                                              /*nb_float*/
+    0,                                              /*nb_oct*/
+    0,                                              /*nb_hex*/
+    (binaryfunc)TrigExpsegTrig_inplace_add,                 /*inplace_add*/
+    (binaryfunc)TrigExpsegTrig_inplace_sub,                 /*inplace_subtract*/
+    (binaryfunc)TrigExpsegTrig_inplace_multiply,            /*inplace_multiply*/
+    (binaryfunc)TrigExpsegTrig_inplace_div,                                              /*inplace_divide*/
+    0,                                              /*inplace_remainder*/
+    0,                                              /*inplace_power*/
+    0,                                              /*inplace_lshift*/
+    0,                                              /*inplace_rshift*/
+    0,                                              /*inplace_and*/
+    0,                                              /*inplace_xor*/
+    0,                                              /*inplace_or*/
+    0,                                              /*nb_floor_divide*/
+    0,                                              /*nb_true_divide*/
+    0,                                              /*nb_inplace_floor_divide*/
+    0,                                              /*nb_inplace_true_divide*/
+    0,                                              /* nb_index */
 };
 
 PyTypeObject TrigExpsegTrigType = {
@@ -2830,7 +3561,7 @@ sizeof(TrigExpsegTrig),         /*tp_basicsize*/
 0,                         /*tp_setattr*/
 0,                         /*tp_compare*/
 0,                         /*tp_repr*/
-0,             /*tp_as_number*/
+&TrigExpsegTrig_as_number,             /*tp_as_number*/
 0,                         /*tp_as_sequence*/
 0,                         /*tp_as_mapping*/
 0,                         /*tp_hash */
@@ -2871,16 +3602,16 @@ typedef struct {
     PyObject *x2;
     Stream *x1_stream;
     Stream *x2_stream;
-    float (*type_func_ptr)();
-    float xx1;
-    float xx2;
+    MYFLT (*type_func_ptr)();
+    MYFLT xx1;
+    MYFLT xx2;
     int type;
-    float value;
-    float lastPoissonX1;
+    MYFLT value;
+    MYFLT lastPoissonX1;
     int poisson_tab;
-    float poisson_buffer[2000];
-    float walkerValue;
-    float loop_buffer[15];
+    MYFLT poisson_buffer[2000];
+    MYFLT walkerValue;
+    MYFLT loop_buffer[15];
     int loopChoice;
     int loopCountPlay;
     int loopTime;
@@ -2891,59 +3622,59 @@ typedef struct {
 } TrigXnoise;
 
 // no parameter
-static float
+static MYFLT
 TrigXnoise_uniform(TrigXnoise *self) {
     return RANDOM_UNIFORM;    
 }
 
-static float
+static MYFLT
 TrigXnoise_linear_min(TrigXnoise *self) {
-    float a = RANDOM_UNIFORM;    
-    float b = RANDOM_UNIFORM;
+    MYFLT a = RANDOM_UNIFORM;    
+    MYFLT b = RANDOM_UNIFORM;
     if (a < b) return a;
     else return b;
 }
 
-static float
+static MYFLT
 TrigXnoise_linear_max(TrigXnoise *self) {
-    float a = RANDOM_UNIFORM;    
-    float b = RANDOM_UNIFORM;
+    MYFLT a = RANDOM_UNIFORM;    
+    MYFLT b = RANDOM_UNIFORM;
     if (a > b) return a;
     else return b;
 }
 
-static float
+static MYFLT
 TrigXnoise_triangle(TrigXnoise *self) {
-    float a = RANDOM_UNIFORM;    
-    float b = RANDOM_UNIFORM;
+    MYFLT a = RANDOM_UNIFORM;    
+    MYFLT b = RANDOM_UNIFORM;
     return ((a + b) * 0.5);
 }
 
 // x1 = slope
-static float
+static MYFLT
 TrigXnoise_expon_min(TrigXnoise *self) {
     if (self->xx1 <= 0.0) self->xx1 = 0.00001;
-    float val = -logf(RANDOM_UNIFORM) / self->xx1;    
+    MYFLT val = -MYLOG(RANDOM_UNIFORM) / self->xx1;    
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
     else return val;
 }
 
-static float
+static MYFLT
 TrigXnoise_expon_max(TrigXnoise *self) {
     if (self->xx1 <= 0.0) self->xx1 = 0.00001;
-    float val = 1.0 - (-logf(RANDOM_UNIFORM) / self->xx1);    
+    MYFLT val = 1.0 - (-MYLOG(RANDOM_UNIFORM) / self->xx1);    
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
     else return val;
 }
 
 // x1 = bandwidth
-static float
+static MYFLT
 TrigXnoise_biexpon(TrigXnoise *self) {
-    float polar, val;
+    MYFLT polar, val;
     if (self->xx1 <= 0.0) self->xx1 = 0.00001;
-    float sum = RANDOM_UNIFORM * 2.0;
+    MYFLT sum = RANDOM_UNIFORM * 2.0;
     
     if (sum > 1.0) {
         polar = -1;
@@ -2952,16 +3683,16 @@ TrigXnoise_biexpon(TrigXnoise *self) {
     else
         polar = 1;
     
-    val = 0.5 * (polar * logf(sum) / self->xx1) + 0.5;
+    val = 0.5 * (polar * MYLOG(sum) / self->xx1) + 0.5;
     
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
     else return val;
 }
 
-static float
+static MYFLT
 TrigXnoise_cauchy(TrigXnoise *self) {
-    float rnd, val, dir;
+    MYFLT rnd, val, dir;
     do {
         rnd = RANDOM_UNIFORM;
     }
@@ -2972,7 +3703,7 @@ TrigXnoise_cauchy(TrigXnoise *self) {
     else
         dir = 1;
     
-    val = 0.5 * (tanf(rnd) * self->xx1 * dir) + 0.5;
+    val = 0.5 * (MYTAN(rnd) * self->xx1 * dir) + 0.5;
     
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
@@ -2980,13 +3711,13 @@ TrigXnoise_cauchy(TrigXnoise *self) {
 }
 
 // x1 = locator, x2 = shape
-static float
+static MYFLT
 TrigXnoise_weibull(TrigXnoise *self) {
-    float rnd, val;
+    MYFLT rnd, val;
     if (self->xx2 <= 0.0) self->xx2 = 0.00001;
     
     rnd = 1.0 / (1.0 - RANDOM_UNIFORM);
-    val = self->xx1 * powf(logf(rnd), (1.0 / self->xx2));
+    val = self->xx1 * MYPOW(MYLOG(rnd), (1.0 / self->xx2));
     
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
@@ -2994,9 +3725,9 @@ TrigXnoise_weibull(TrigXnoise *self) {
 }
 
 // x1 = locator, x2 = bandwidth
-static float
+static MYFLT
 TrigXnoise_gaussian(TrigXnoise *self) {
-    float rnd, val;
+    MYFLT rnd, val;
     
     rnd = (RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM);
     val = (self->xx2 * (rnd - 3.0) * 0.33 + self->xx1);
@@ -3007,11 +3738,11 @@ TrigXnoise_gaussian(TrigXnoise *self) {
 }
 
 // x1 = gravity center, x2 = compress/expand
-static float
+static MYFLT
 TrigXnoise_poisson(TrigXnoise *self) {
     int i, j, factorial;
     long tot;
-    float val;
+    MYFLT val;
     if (self->xx1 < 0.1) self->xx1 = 0.1;
     if (self->xx2 < 0.1) self->xx2 = 0.1;
     
@@ -3021,7 +3752,7 @@ TrigXnoise_poisson(TrigXnoise *self) {
         factorial = 1;
         for (i=1; i<12; i++) {
             factorial *= i;
-            tot = (long)(1000.0 * (powf(2.7182818, -self->xx1) * powf(self->xx1, i) / factorial));
+            tot = (long)(1000.0 * (MYPOW(2.7182818, -self->xx1) * MYPOW(self->xx1, i) / factorial));
             for (j=0; j<tot; j++) {
                 self->poisson_buffer[self->poisson_tab] = i;
                 self->poisson_tab++;
@@ -3036,7 +3767,7 @@ TrigXnoise_poisson(TrigXnoise *self) {
 }
 
 // x1 = max value, x2 = max step
-static float
+static MYFLT
 TrigXnoise_walker(TrigXnoise *self) {
     int modulo, dir;
     
@@ -3059,7 +3790,7 @@ TrigXnoise_walker(TrigXnoise *self) {
 }
 
 // x1 = max value, x2 = max step
-static float
+static MYFLT
 TrigXnoise_loopseg(TrigXnoise *self) {
     int modulo, dir;
     
@@ -3115,7 +3846,7 @@ TrigXnoise_loopseg(TrigXnoise *self) {
 static void
 TrigXnoise_generate_ii(TrigXnoise *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     self->xx1 = PyFloat_AS_DOUBLE(self->x1);
     self->xx2 = PyFloat_AS_DOUBLE(self->x2);
     
@@ -3129,8 +3860,8 @@ TrigXnoise_generate_ii(TrigXnoise *self) {
 static void
 TrigXnoise_generate_ai(TrigXnoise *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *x1 = Stream_getData((Stream *)self->x1_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *x1 = Stream_getData((Stream *)self->x1_stream);
     self->xx2 = PyFloat_AS_DOUBLE(self->x2);
     
     for (i=0; i<self->bufsize; i++) {
@@ -3145,9 +3876,9 @@ TrigXnoise_generate_ai(TrigXnoise *self) {
 static void
 TrigXnoise_generate_ia(TrigXnoise *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     self->xx1 = PyFloat_AS_DOUBLE(self->x1);
-    float *x2 = Stream_getData((Stream *)self->x2_stream);
+    MYFLT *x2 = Stream_getData((Stream *)self->x2_stream);
     
     for (i=0; i<self->bufsize; i++) {
         if (in[i] == 1) {
@@ -3161,9 +3892,9 @@ TrigXnoise_generate_ia(TrigXnoise *self) {
 static void
 TrigXnoise_generate_aa(TrigXnoise *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *x1 = Stream_getData((Stream *)self->x1_stream);
-    float *x2 = Stream_getData((Stream *)self->x2_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *x1 = Stream_getData((Stream *)self->x1_stream);
+    MYFLT *x2 = Stream_getData((Stream *)self->x2_stream);
     
     for (i=0; i<self->bufsize; i++) {
         if (in[i] == 1) {
@@ -3397,9 +4128,7 @@ TrigXnoise_init(TrigXnoise *self, PyObject *args, PyObject *kwds)
     TrigXnoise_setRandomType(self);
     
     (*self->mode_func_ptr)(self);
-    
-    TrigXnoise_compute_next_data_frame((TrigXnoise *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -3411,7 +4140,7 @@ static PyObject * TrigXnoise_setAdd(TrigXnoise *self, PyObject *arg) { SET_ADD }
 static PyObject * TrigXnoise_setSub(TrigXnoise *self, PyObject *arg) { SET_SUB };	
 static PyObject * TrigXnoise_setDiv(TrigXnoise *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * TrigXnoise_play(TrigXnoise *self) { PLAY };
+static PyObject * TrigXnoise_play(TrigXnoise *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * TrigXnoise_out(TrigXnoise *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * TrigXnoise_stop(TrigXnoise *self) { STOP };
 
@@ -3526,7 +4255,7 @@ static PyMethodDef TrigXnoise_methods[] = {
     {"getServer", (PyCFunction)TrigXnoise_getServer, METH_NOARGS, "Returns server object."},
     {"_getStream", (PyCFunction)TrigXnoise_getStream, METH_NOARGS, "Returns stream object."},
     {"deleteStream", (PyCFunction)TrigXnoise_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-    {"play", (PyCFunction)TrigXnoise_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+    {"play", (PyCFunction)TrigXnoise_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
     {"out", (PyCFunction)TrigXnoise_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
     {"stop", (PyCFunction)TrigXnoise_stop, METH_NOARGS, "Stops computing."},
     {"setType", (PyCFunction)TrigXnoise_setType, METH_O, "Sets distribution type."},
@@ -3634,20 +4363,20 @@ typedef struct {
     PyObject *x2;
     Stream *x1_stream;
     Stream *x2_stream;
-    float (*type_func_ptr)();
+    MYFLT (*type_func_ptr)();
     int scale; // 0 = Midi, 1 = frequency, 2 = transpo
     int range_min;
     int range_max;
     int centralkey;
-    float xx1;
-    float xx2;
+    MYFLT xx1;
+    MYFLT xx2;
     int type;
-    float value;
-    float lastPoissonX1;
+    MYFLT value;
+    MYFLT lastPoissonX1;
     int poisson_tab;
-    float poisson_buffer[2000];
-    float walkerValue;
-    float loop_buffer[15];
+    MYFLT poisson_buffer[2000];
+    MYFLT walkerValue;
+    MYFLT loop_buffer[15];
     int loopChoice;
     int loopCountPlay;
     int loopTime;
@@ -3657,10 +4386,10 @@ typedef struct {
     int modebuffer[4]; // need at least 2 slots for mul & add 
 } TrigXnoiseMidi;
 
-static float
+static MYFLT
 TrigXnoiseMidi_convert(TrigXnoiseMidi *self) {
     int midival;
-    float val;
+    MYFLT val;
     
     midival = (int)((self->value * (self->range_max-self->range_min)) + self->range_min);
     
@@ -3670,11 +4399,11 @@ TrigXnoiseMidi_convert(TrigXnoiseMidi *self) {
         midival = 127;
     
     if (self->scale == 0)
-        val = (float)midival;
+        val = (MYFLT)midival;
     else if (self->scale == 1)
-        val = 8.175798 * powf(1.0594633, midival);
+        val = 8.1757989156437 * MYPOW(1.0594630943593, midival);
     else if (self->scale == 2)
-        val = powf(1.0594633, midival - self->centralkey);
+        val = MYPOW(1.0594630943593, midival - self->centralkey);
     else
         val = midival;
 
@@ -3683,59 +4412,59 @@ TrigXnoiseMidi_convert(TrigXnoiseMidi *self) {
 
 
 // no parameter
-static float
+static MYFLT
 TrigXnoiseMidi_uniform(TrigXnoiseMidi *self) {
     return RANDOM_UNIFORM;    
 }
 
-static float
+static MYFLT
 TrigXnoiseMidi_linear_min(TrigXnoiseMidi *self) {
-    float a = RANDOM_UNIFORM;    
-    float b = RANDOM_UNIFORM;
+    MYFLT a = RANDOM_UNIFORM;    
+    MYFLT b = RANDOM_UNIFORM;
     if (a < b) return a;
     else return b;
 }
 
-static float
+static MYFLT
 TrigXnoiseMidi_linear_max(TrigXnoiseMidi *self) {
-    float a = RANDOM_UNIFORM;    
-    float b = RANDOM_UNIFORM;
+    MYFLT a = RANDOM_UNIFORM;    
+    MYFLT b = RANDOM_UNIFORM;
     if (a > b) return a;
     else return b;
 }
 
-static float
+static MYFLT
 TrigXnoiseMidi_triangle(TrigXnoiseMidi *self) {
-    float a = RANDOM_UNIFORM;    
-    float b = RANDOM_UNIFORM;
+    MYFLT a = RANDOM_UNIFORM;    
+    MYFLT b = RANDOM_UNIFORM;
     return ((a + b) * 0.5);
 }
 
 // x1 = slope
-static float
+static MYFLT
 TrigXnoiseMidi_expon_min(TrigXnoiseMidi *self) {
     if (self->xx1 <= 0.0) self->xx1 = 0.00001;
-    float val = -logf(RANDOM_UNIFORM) / self->xx1;    
+    MYFLT val = -MYLOG(RANDOM_UNIFORM) / self->xx1;    
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
     else return val;
 }
 
-static float
+static MYFLT
 TrigXnoiseMidi_expon_max(TrigXnoiseMidi *self) {
     if (self->xx1 <= 0.0) self->xx1 = 0.00001;
-    float val = 1.0 - (-logf(RANDOM_UNIFORM) / self->xx1);    
+    MYFLT val = 1.0 - (-MYLOG(RANDOM_UNIFORM) / self->xx1);    
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
     else return val;
 }
 
 // x1 = bandwidth
-static float
+static MYFLT
 TrigXnoiseMidi_biexpon(TrigXnoiseMidi *self) {
-    float polar, val;
+    MYFLT polar, val;
     if (self->xx1 <= 0.0) self->xx1 = 0.00001;
-    float sum = RANDOM_UNIFORM * 2.0;
+    MYFLT sum = RANDOM_UNIFORM * 2.0;
     
     if (sum > 1.0) {
         polar = -1;
@@ -3744,16 +4473,16 @@ TrigXnoiseMidi_biexpon(TrigXnoiseMidi *self) {
     else
         polar = 1;
     
-    val = 0.5 * (polar * logf(sum) / self->xx1) + 0.5;
+    val = 0.5 * (polar * MYLOG(sum) / self->xx1) + 0.5;
     
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
     else return val;
 }
 
-static float
+static MYFLT
 TrigXnoiseMidi_cauchy(TrigXnoiseMidi *self) {
-    float rnd, val, dir;
+    MYFLT rnd, val, dir;
     do {
         rnd = RANDOM_UNIFORM;
     }
@@ -3764,7 +4493,7 @@ TrigXnoiseMidi_cauchy(TrigXnoiseMidi *self) {
     else
         dir = 1;
     
-    val = 0.5 * (tanf(rnd) * self->xx1 * dir) + 0.5;
+    val = 0.5 * (MYTAN(rnd) * self->xx1 * dir) + 0.5;
     
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
@@ -3772,13 +4501,13 @@ TrigXnoiseMidi_cauchy(TrigXnoiseMidi *self) {
 }
 
 // x1 = locator, x2 = shape
-static float
+static MYFLT
 TrigXnoiseMidi_weibull(TrigXnoiseMidi *self) {
-    float rnd, val;
+    MYFLT rnd, val;
     if (self->xx2 <= 0.0) self->xx2 = 0.00001;
     
     rnd = 1.0 / (1.0 - RANDOM_UNIFORM);
-    val = self->xx1 * powf(logf(rnd), (1.0 / self->xx2));
+    val = self->xx1 * MYPOW(MYLOG(rnd), (1.0 / self->xx2));
     
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
@@ -3786,9 +4515,9 @@ TrigXnoiseMidi_weibull(TrigXnoiseMidi *self) {
 }
 
 // x1 = locator, x2 = bandwidth
-static float
+static MYFLT
 TrigXnoiseMidi_gaussian(TrigXnoiseMidi *self) {
-    float rnd, val;
+    MYFLT rnd, val;
     
     rnd = (RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM);
     val = (self->xx2 * (rnd - 3.0) * 0.33 + self->xx1);
@@ -3799,11 +4528,11 @@ TrigXnoiseMidi_gaussian(TrigXnoiseMidi *self) {
 }
 
 // x1 = gravity center, x2 = compress/expand
-static float
+static MYFLT
 TrigXnoiseMidi_poisson(TrigXnoiseMidi *self) {
     int i, j, factorial;
     long tot;
-    float val;
+    MYFLT val;
     if (self->xx1 < 0.1) self->xx1 = 0.1;
     if (self->xx2 < 0.1) self->xx2 = 0.1;
     
@@ -3813,7 +4542,7 @@ TrigXnoiseMidi_poisson(TrigXnoiseMidi *self) {
         factorial = 1;
         for (i=1; i<12; i++) {
             factorial *= i;
-            tot = (long)(1000.0 * (powf(2.7182818, -self->xx1) * powf(self->xx1, i) / factorial));
+            tot = (long)(1000.0 * (MYPOW(2.7182818, -self->xx1) * MYPOW(self->xx1, i) / factorial));
             for (j=0; j<tot; j++) {
                 self->poisson_buffer[self->poisson_tab] = i;
                 self->poisson_tab++;
@@ -3828,7 +4557,7 @@ TrigXnoiseMidi_poisson(TrigXnoiseMidi *self) {
 }
 
 // x1 = max value, x2 = max step
-static float
+static MYFLT
 TrigXnoiseMidi_walker(TrigXnoiseMidi *self) {
     int modulo, dir;
     
@@ -3851,7 +4580,7 @@ TrigXnoiseMidi_walker(TrigXnoiseMidi *self) {
 }
 
 // x1 = max value, x2 = max step
-static float
+static MYFLT
 TrigXnoiseMidi_loopseg(TrigXnoiseMidi *self) {
     int modulo, dir;
     
@@ -3907,7 +4636,7 @@ TrigXnoiseMidi_loopseg(TrigXnoiseMidi *self) {
 static void
 TrigXnoiseMidi_generate_ii(TrigXnoiseMidi *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     self->xx1 = PyFloat_AS_DOUBLE(self->x1);
     self->xx2 = PyFloat_AS_DOUBLE(self->x2);
     
@@ -3923,8 +4652,8 @@ TrigXnoiseMidi_generate_ii(TrigXnoiseMidi *self) {
 static void
 TrigXnoiseMidi_generate_ai(TrigXnoiseMidi *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *x1 = Stream_getData((Stream *)self->x1_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *x1 = Stream_getData((Stream *)self->x1_stream);
     self->xx2 = PyFloat_AS_DOUBLE(self->x2);
     
     for (i=0; i<self->bufsize; i++) {
@@ -3940,9 +4669,9 @@ TrigXnoiseMidi_generate_ai(TrigXnoiseMidi *self) {
 static void
 TrigXnoiseMidi_generate_ia(TrigXnoiseMidi *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     self->xx1 = PyFloat_AS_DOUBLE(self->x1);
-    float *x2 = Stream_getData((Stream *)self->x2_stream);
+    MYFLT *x2 = Stream_getData((Stream *)self->x2_stream);
     
     for (i=0; i<self->bufsize; i++) {
         if (in[i] == 1) {
@@ -3957,9 +4686,9 @@ TrigXnoiseMidi_generate_ia(TrigXnoiseMidi *self) {
 static void
 TrigXnoiseMidi_generate_aa(TrigXnoiseMidi *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *x1 = Stream_getData((Stream *)self->x1_stream);
-    float *x2 = Stream_getData((Stream *)self->x2_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *x1 = Stream_getData((Stream *)self->x1_stream);
+    MYFLT *x2 = Stream_getData((Stream *)self->x2_stream);
     
     for (i=0; i<self->bufsize; i++) {
         if (in[i] == 1) {
@@ -4202,9 +4931,7 @@ TrigXnoiseMidi_init(TrigXnoiseMidi *self, PyObject *args, PyObject *kwds)
     TrigXnoiseMidi_setRandomType(self);
     
     (*self->mode_func_ptr)(self);
-    
-    TrigXnoiseMidi_compute_next_data_frame((TrigXnoiseMidi *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -4216,7 +4943,7 @@ static PyObject * TrigXnoiseMidi_setAdd(TrigXnoiseMidi *self, PyObject *arg) { S
 static PyObject * TrigXnoiseMidi_setSub(TrigXnoiseMidi *self, PyObject *arg) { SET_SUB };	
 static PyObject * TrigXnoiseMidi_setDiv(TrigXnoiseMidi *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * TrigXnoiseMidi_play(TrigXnoiseMidi *self) { PLAY };
+static PyObject * TrigXnoiseMidi_play(TrigXnoiseMidi *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * TrigXnoiseMidi_out(TrigXnoiseMidi *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * TrigXnoiseMidi_stop(TrigXnoiseMidi *self) { STOP };
 
@@ -4374,7 +5101,7 @@ static PyMethodDef TrigXnoiseMidi_methods[] = {
     {"getServer", (PyCFunction)TrigXnoiseMidi_getServer, METH_NOARGS, "Returns server object."},
     {"_getStream", (PyCFunction)TrigXnoiseMidi_getStream, METH_NOARGS, "Returns stream object."},
     {"deleteStream", (PyCFunction)TrigXnoiseMidi_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-    {"play", (PyCFunction)TrigXnoiseMidi_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+    {"play", (PyCFunction)TrigXnoiseMidi_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
     {"out", (PyCFunction)TrigXnoiseMidi_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
     {"stop", (PyCFunction)TrigXnoiseMidi_stop, METH_NOARGS, "Stops computing."},
     {"setType", (PyCFunction)TrigXnoiseMidi_setType, METH_O, "Sets distribution type."},
@@ -4485,39 +5212,38 @@ typedef struct {
     long max;
     int dir;
     int direction;
-    float value;
+    MYFLT value;
     int modebuffer[2]; // need at least 2 slots for mul & add 
 } Counter;
 
 static void
 Counter_generates(Counter *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
     
     for (i=0; i<self->bufsize; i++) {
         if (in[i] == 1) {
             if (self->dir == 0) {
-                self->value = (float)self->tmp;
+                self->value = (MYFLT)self->tmp;
                 self->tmp++;
-                if (self->tmp > self->max)
+                if (self->tmp >= self->max)
                     self->tmp = self->min;
             }    
             else if (self->dir == 1) {
-                self->value = (float)self->tmp;
+                self->value = (MYFLT)self->tmp;
                 self->tmp--;
                 if (self->tmp < self->min)
-                    self->tmp = self->max;
+                    self->tmp = self->max - 1;
             }    
             else if (self->dir == 2) {
-                self->value = (float)self->tmp;
+                self->value = (MYFLT)self->tmp;
                 self->tmp = self->tmp + self->direction;
                 if (self->tmp >= self->max) {
                     self->direction = -1;
-                    self->tmp--;
+                    self->tmp -= 2;
                 }    
                 else if (self->tmp <= self->min) {
                     self->direction = 1;
-                    self->tmp++;
                 }    
             }
         }
@@ -4613,6 +5339,7 @@ static PyObject * Counter_deleteStream(Counter *self) { DELETE_STREAM };
 static PyObject *
 Counter_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Counter *self;
     self = (Counter *)type->tp_alloc(type, 0);
     
@@ -4655,12 +5382,10 @@ Counter_init(Counter *self, PyObject *args, PyObject *kwds)
     if (self->dir == 0 || self->dir == 2)
         self->tmp = self->min;
     else
-        self->tmp = self->max;
+        self->tmp = self->max - 1;
     
     (*self->mode_func_ptr)(self);
-    
-    Counter_compute_next_data_frame((Counter *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -4672,7 +5397,7 @@ static PyObject * Counter_setAdd(Counter *self, PyObject *arg) { SET_ADD };
 static PyObject * Counter_setSub(Counter *self, PyObject *arg) { SET_SUB };	
 static PyObject * Counter_setDiv(Counter *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * Counter_play(Counter *self) { PLAY };
+static PyObject * Counter_play(Counter *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Counter_stop(Counter *self) { STOP };
 
 static PyObject * Counter_multiply(Counter *self, PyObject *arg) { MULTIPLY };
@@ -4732,6 +5457,28 @@ Counter_setDir(Counter *self, PyObject *arg)
 	return Py_None;
 }	
 
+static PyObject *
+Counter_reset(Counter *self, PyObject *arg)
+{
+    int val;
+    
+    if (arg == Py_None) {
+        if (self->dir == 0 || self->dir == 2)
+            val = self->min;
+        else
+            val = self->max - 1;
+        self->tmp = val;
+    }
+    
+    else if (PyInt_Check(arg)) {
+        val = PyInt_AsLong(arg);
+        self->tmp = val;
+    }
+    
+	Py_INCREF(Py_None);
+	return Py_None;
+}
+
 static PyMemberDef Counter_members[] = {
 {"server", T_OBJECT_EX, offsetof(Counter, server), 0, "Pyo server."},
 {"stream", T_OBJECT_EX, offsetof(Counter, stream), 0, "Stream object."},
@@ -4745,11 +5492,12 @@ static PyMethodDef Counter_methods[] = {
 {"getServer", (PyCFunction)Counter_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Counter_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Counter_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Counter_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Counter_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)Counter_stop, METH_NOARGS, "Stops computing."},
 {"setMin", (PyCFunction)Counter_setMin, METH_O, "Sets minimum value."},
 {"setMax", (PyCFunction)Counter_setMax, METH_O, "Sets maximum value."},
 {"setDir", (PyCFunction)Counter_setDir, METH_O, "Sets direction. 0 = forward, 1 = backward, 2 = back and forth"},
+{"reset", (PyCFunction)Counter_reset, METH_O, "Resets the current count of the counter."},
 {"setMul", (PyCFunction)Counter_setMul, METH_O, "Sets oscillator mul factor."},
 {"setAdd", (PyCFunction)Counter_setAdd, METH_O, "Sets oscillator add factor."},
 {"setSub", (PyCFunction)Counter_setSub, METH_O, "Sets inverse add factor."},
@@ -4852,14 +5600,14 @@ typedef struct {
     Stream *threshold_stream;
     int dir;
     int ready;
-    int modebuffer[1];
+    int modebuffer[3];
 } Thresh;
 
 static void
 Thresh_generates_i(Thresh *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float thresh = PyFloat_AS_DOUBLE(self->threshold);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT thresh = PyFloat_AS_DOUBLE(self->threshold);
 
     switch (self->dir) {
         case 0:
@@ -4903,8 +5651,8 @@ Thresh_generates_i(Thresh *self) {
 static void
 Thresh_generates_a(Thresh *self) {
     int i;
-    float *in = Stream_getData((Stream *)self->input_stream);
-    float *thresh = Stream_getData((Stream *)self->threshold_stream);
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *thresh = Stream_getData((Stream *)self->threshold_stream);
     
     switch (self->dir) {
         case 0:
@@ -4944,10 +5692,22 @@ Thresh_generates_a(Thresh *self) {
     }
 }
 
+static void Thresh_postprocessing_ii(Thresh *self) { POST_PROCESSING_II };
+static void Thresh_postprocessing_ai(Thresh *self) { POST_PROCESSING_AI };
+static void Thresh_postprocessing_ia(Thresh *self) { POST_PROCESSING_IA };
+static void Thresh_postprocessing_aa(Thresh *self) { POST_PROCESSING_AA };
+static void Thresh_postprocessing_ireva(Thresh *self) { POST_PROCESSING_IREVA };
+static void Thresh_postprocessing_areva(Thresh *self) { POST_PROCESSING_AREVA };
+static void Thresh_postprocessing_revai(Thresh *self) { POST_PROCESSING_REVAI };
+static void Thresh_postprocessing_revaa(Thresh *self) { POST_PROCESSING_REVAA };
+static void Thresh_postprocessing_revareva(Thresh *self) { POST_PROCESSING_REVAREVA };
+
 static void
 Thresh_setProcMode(Thresh *self)
 {    
-    int procmode = self->modebuffer[0];
+    int procmode = self->modebuffer[2];
+    int muladdmode = self->modebuffer[0] + self->modebuffer[1] * 10;
+
     switch (procmode) {
         case 0:        
             self->proc_func_ptr = Thresh_generates_i;
@@ -4956,12 +5716,42 @@ Thresh_setProcMode(Thresh *self)
             self->proc_func_ptr = Thresh_generates_a;
             break;
     }
+    switch (muladdmode) {
+        case 0:        
+            self->muladd_func_ptr = Thresh_postprocessing_ii;
+            break;
+        case 1:    
+            self->muladd_func_ptr = Thresh_postprocessing_ai;
+            break;
+        case 2:    
+            self->muladd_func_ptr = Thresh_postprocessing_revai;
+            break;
+        case 10:        
+            self->muladd_func_ptr = Thresh_postprocessing_ia;
+            break;
+        case 11:    
+            self->muladd_func_ptr = Thresh_postprocessing_aa;
+            break;
+        case 12:    
+            self->muladd_func_ptr = Thresh_postprocessing_revaa;
+            break;
+        case 20:        
+            self->muladd_func_ptr = Thresh_postprocessing_ireva;
+            break;
+        case 21:    
+            self->muladd_func_ptr = Thresh_postprocessing_areva;
+            break;
+        case 22:    
+            self->muladd_func_ptr = Thresh_postprocessing_revareva;
+            break;
+    }  
 }
 
 static void
 Thresh_compute_next_data_frame(Thresh *self)
 {
     (*self->proc_func_ptr)(self); 
+    (*self->muladd_func_ptr)(self);
     Stream_setData(self->stream, self->data);
 }
 
@@ -5000,13 +5790,16 @@ static PyObject * Thresh_deleteStream(Thresh *self) { DELETE_STREAM };
 static PyObject *
 Thresh_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Thresh *self;
     self = (Thresh *)type->tp_alloc(type, 0);
     
     self->threshold = PyFloat_FromDouble(0.);
     self->dir = 0;
     self->ready = 0;
-    self->modebuffer[0] = 0;
+	self->modebuffer[0] = 0;
+	self->modebuffer[1] = 0;
+    self->modebuffer[2] = 0;
     
     INIT_OBJECT_COMMON
     Stream_setFunctionPtr(self->stream, Thresh_compute_next_data_frame);
@@ -5017,11 +5810,11 @@ Thresh_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 static int
 Thresh_init(Thresh *self, PyObject *args, PyObject *kwds)
 {
-    PyObject *inputtmp, *input_streamtmp, *thresholdtmp;
+    PyObject *inputtmp, *input_streamtmp, *thresholdtmp, *multmp=NULL, *addtmp=NULL;
     
-    static char *kwlist[] = {"input", "threshold", "dir", NULL};
+    static char *kwlist[] = {"input", "threshold", "dir", "mul", "add", NULL};
     
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O|Oi", kwlist, &inputtmp, &thresholdtmp, &self->dir))
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O|OiOO", kwlist, &inputtmp, &thresholdtmp, &self->dir, &multmp, &addtmp))
         return -1; 
     
     INIT_INPUT_STREAM
@@ -5029,23 +5822,41 @@ Thresh_init(Thresh *self, PyObject *args, PyObject *kwds)
     if (thresholdtmp) {
         PyObject_CallMethod((PyObject *)self, "setThreshold", "O", thresholdtmp);
     }
-   
+    if (multmp) {
+        PyObject_CallMethod((PyObject *)self, "setMul", "O", multmp);
+    }
+    
+    if (addtmp) {
+        PyObject_CallMethod((PyObject *)self, "setAdd", "O", addtmp);
+    }
+    
     Py_INCREF(self->stream);
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
 
     (*self->mode_func_ptr)(self);
-    
-    Thresh_compute_next_data_frame((Thresh *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
 
 static PyObject * Thresh_getServer(Thresh* self) { GET_SERVER };
 static PyObject * Thresh_getStream(Thresh* self) { GET_STREAM };
+static PyObject * Thresh_setMul(Thresh *self, PyObject *arg) { SET_MUL };	
+static PyObject * Thresh_setAdd(Thresh *self, PyObject *arg) { SET_ADD };	
+static PyObject * Thresh_setSub(Thresh *self, PyObject *arg) { SET_SUB };	
+static PyObject * Thresh_setDiv(Thresh *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * Thresh_play(Thresh *self) { PLAY };
+static PyObject * Thresh_play(Thresh *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Thresh_stop(Thresh *self) { STOP };
+
+static PyObject * Thresh_multiply(Thresh *self, PyObject *arg) { MULTIPLY };
+static PyObject * Thresh_inplace_multiply(Thresh *self, PyObject *arg) { INPLACE_MULTIPLY };
+static PyObject * Thresh_add(Thresh *self, PyObject *arg) { ADD };
+static PyObject * Thresh_inplace_add(Thresh *self, PyObject *arg) { INPLACE_ADD };
+static PyObject * Thresh_sub(Thresh *self, PyObject *arg) { SUB };
+static PyObject * Thresh_inplace_sub(Thresh *self, PyObject *arg) { INPLACE_SUB };
+static PyObject * Thresh_div(Thresh *self, PyObject *arg) { DIV };
+static PyObject * Thresh_inplace_div(Thresh *self, PyObject *arg) { INPLACE_DIV };
 
 static PyObject *
 Thresh_setThreshold(Thresh *self, PyObject *arg)
@@ -5102,6 +5913,8 @@ static PyMemberDef Thresh_members[] = {
 {"stream", T_OBJECT_EX, offsetof(Thresh, stream), 0, "Stream object."},
 {"input", T_OBJECT_EX, offsetof(Thresh, input), 0, "Input sound object."},
 {"threshold", T_OBJECT_EX, offsetof(Thresh, threshold), 0, "Threshold object."},
+{"mul", T_OBJECT_EX, offsetof(Thresh, mul), 0, "Mul factor."},
+{"add", T_OBJECT_EX, offsetof(Thresh, add), 0, "Add factor."},
 {NULL}  /* Sentinel */
 };
 
@@ -5109,11 +5922,57 @@ static PyMethodDef Thresh_methods[] = {
 {"getServer", (PyCFunction)Thresh_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Thresh_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Thresh_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Thresh_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Thresh_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"stop", (PyCFunction)Thresh_stop, METH_NOARGS, "Stops computing."},
 {"setThreshold", (PyCFunction)Thresh_setThreshold, METH_O, "Sets threshold value."},
 {"setDir", (PyCFunction)Thresh_setDir, METH_O, "Sets direction. 0 = upward, 1 = downward, 2 = up and down"},
+{"setMul", (PyCFunction)Thresh_setMul, METH_O, "Sets mul factor."},
+{"setAdd", (PyCFunction)Thresh_setAdd, METH_O, "Sets add factor."},
+{"setSub", (PyCFunction)Thresh_setSub, METH_O, "Sets inverse add factor."},
+{"setDiv", (PyCFunction)Thresh_setDiv, METH_O, "Sets inverse mul factor."},
 {NULL}  /* Sentinel */
+};
+
+static PyNumberMethods Thresh_as_number = {
+    (binaryfunc)Thresh_add,                         /*nb_add*/
+    (binaryfunc)Thresh_sub,                         /*nb_subtract*/
+    (binaryfunc)Thresh_multiply,                    /*nb_multiply*/
+    (binaryfunc)Thresh_div,                                              /*nb_divide*/
+    0,                                              /*nb_remainder*/
+    0,                                              /*nb_divmod*/
+    0,                                              /*nb_power*/
+    0,                                              /*nb_neg*/
+    0,                                              /*nb_pos*/
+    0,                                              /*(unaryfunc)array_abs,*/
+    0,                                              /*nb_nonzero*/
+    0,                                              /*nb_invert*/
+    0,                                              /*nb_lshift*/
+    0,                                              /*nb_rshift*/
+    0,                                              /*nb_and*/
+    0,                                              /*nb_xor*/
+    0,                                              /*nb_or*/
+    0,                                              /*nb_coerce*/
+    0,                                              /*nb_int*/
+    0,                                              /*nb_long*/
+    0,                                              /*nb_float*/
+    0,                                              /*nb_oct*/
+    0,                                              /*nb_hex*/
+    (binaryfunc)Thresh_inplace_add,                 /*inplace_add*/
+    (binaryfunc)Thresh_inplace_sub,                 /*inplace_subtract*/
+    (binaryfunc)Thresh_inplace_multiply,            /*inplace_multiply*/
+    (binaryfunc)Thresh_inplace_div,                                              /*inplace_divide*/
+    0,                                              /*inplace_remainder*/
+    0,                                              /*inplace_power*/
+    0,                                              /*inplace_lshift*/
+    0,                                              /*inplace_rshift*/
+    0,                                              /*inplace_and*/
+    0,                                              /*inplace_xor*/
+    0,                                              /*inplace_or*/
+    0,                                              /*nb_floor_divide*/
+    0,                                              /*nb_true_divide*/
+    0,                                              /*nb_inplace_floor_divide*/
+    0,                                              /*nb_inplace_true_divide*/
+    0,                                              /* nb_index */
 };
 
 PyTypeObject ThreshType = {
@@ -5128,7 +5987,7 @@ sizeof(Thresh),                                 /*tp_basicsize*/
 0,                                              /*tp_setattr*/
 0,                                              /*tp_compare*/
 0,                                              /*tp_repr*/
-0,                              /*tp_as_number*/
+&Thresh_as_number,                              /*tp_as_number*/
 0,                                              /*tp_as_sequence*/
 0,                                              /*tp_as_mapping*/
 0,                                              /*tp_hash */
@@ -5156,4 +6015,358 @@ Thresh_members,                                 /* tp_members */
 (initproc)Thresh_init,                          /* tp_init */
 0,                                              /* tp_alloc */
 Thresh_new,                                     /* tp_new */
+};
+
+/***************************************************/
+/******* Percent ***********/
+/***************************************************/
+typedef struct {
+    pyo_audio_HEAD
+    PyObject *input;
+    Stream *input_stream;
+    PyObject *percent;
+    Stream *percent_stream;
+    int modebuffer[3];
+} Percent;
+
+static void
+Percent_generates_i(Percent *self) {
+    int i;
+    MYFLT guess;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT perc = PyFloat_AS_DOUBLE(self->percent);
+    for (i=0; i<self->bufsize; i++) {
+        self->data[i] = 0.0;
+        if (in[i] == 1.0) {
+            guess = (rand()/((MYFLT)(RAND_MAX)+1)) * 100.0;
+            if (guess <= perc)
+                self->data[i] = 1.0;
+        }    
+    }
+}
+
+static void
+Percent_generates_a(Percent *self) {
+    int i;
+    MYFLT guess;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *perc = Stream_getData((Stream *)self->percent_stream);
+    
+    for (i=0; i<self->bufsize; i++) {
+        self->data[i] = 0.0;
+        if (in[i] == 1.0) {
+            guess = (rand()/((MYFLT)(RAND_MAX)+1)) * 100.0;
+            if (guess <= perc[i])
+                self->data[i] = 1.0;
+        }    
+    }
+}
+
+static void Percent_postprocessing_ii(Percent *self) { POST_PROCESSING_II };
+static void Percent_postprocessing_ai(Percent *self) { POST_PROCESSING_AI };
+static void Percent_postprocessing_ia(Percent *self) { POST_PROCESSING_IA };
+static void Percent_postprocessing_aa(Percent *self) { POST_PROCESSING_AA };
+static void Percent_postprocessing_ireva(Percent *self) { POST_PROCESSING_IREVA };
+static void Percent_postprocessing_areva(Percent *self) { POST_PROCESSING_AREVA };
+static void Percent_postprocessing_revai(Percent *self) { POST_PROCESSING_REVAI };
+static void Percent_postprocessing_revaa(Percent *self) { POST_PROCESSING_REVAA };
+static void Percent_postprocessing_revareva(Percent *self) { POST_PROCESSING_REVAREVA };
+
+static void
+Percent_setProcMode(Percent *self)
+{    
+    int muladdmode, procmode
+    ;
+    procmode = self->modebuffer[2];
+    muladdmode = self->modebuffer[0] + self->modebuffer[1] * 10;
+    switch (procmode) {
+        case 0:        
+            self->proc_func_ptr = Percent_generates_i;
+            break;
+        case 1:    
+            self->proc_func_ptr = Percent_generates_a;
+            break;
+    }
+    switch (muladdmode) {
+        case 0:        
+            self->muladd_func_ptr = Percent_postprocessing_ii;
+            break;
+        case 1:    
+            self->muladd_func_ptr = Percent_postprocessing_ai;
+            break;
+        case 2:    
+            self->muladd_func_ptr = Percent_postprocessing_revai;
+            break;
+        case 10:        
+            self->muladd_func_ptr = Percent_postprocessing_ia;
+            break;
+        case 11:    
+            self->muladd_func_ptr = Percent_postprocessing_aa;
+            break;
+        case 12:    
+            self->muladd_func_ptr = Percent_postprocessing_revaa;
+            break;
+        case 20:        
+            self->muladd_func_ptr = Percent_postprocessing_ireva;
+            break;
+        case 21:    
+            self->muladd_func_ptr = Percent_postprocessing_areva;
+            break;
+        case 22:    
+            self->muladd_func_ptr = Percent_postprocessing_revareva;
+            break;
+    }  
+}
+
+static void
+Percent_compute_next_data_frame(Percent *self)
+{
+    (*self->proc_func_ptr)(self); 
+    (*self->muladd_func_ptr)(self);
+    Stream_setData(self->stream, self->data);
+}
+
+static int
+Percent_traverse(Percent *self, visitproc visit, void *arg)
+{
+    pyo_VISIT
+    Py_VISIT(self->input);
+    Py_VISIT(self->input_stream);
+    Py_VISIT(self->percent);
+    Py_VISIT(self->percent_stream);
+    return 0;
+}
+
+static int 
+Percent_clear(Percent *self)
+{
+    pyo_CLEAR
+    Py_CLEAR(self->input);
+    Py_CLEAR(self->input_stream);
+    Py_CLEAR(self->percent);
+    Py_CLEAR(self->percent_stream);
+    return 0;
+}
+
+static void
+Percent_dealloc(Percent* self)
+{
+    free(self->data);
+    Percent_clear(self);
+    self->ob_type->tp_free((PyObject*)self);
+}
+
+static PyObject * Percent_deleteStream(Percent *self) { DELETE_STREAM };
+
+static PyObject *
+Percent_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    int i;
+    Percent *self;
+    self = (Percent *)type->tp_alloc(type, 0);
+    
+    self->percent = PyFloat_FromDouble(50.);
+	self->modebuffer[0] = 0;
+	self->modebuffer[1] = 0;
+    self->modebuffer[2] = 0;
+    
+    INIT_OBJECT_COMMON
+    Stream_setFunctionPtr(self->stream, Percent_compute_next_data_frame);
+    self->mode_func_ptr = Percent_setProcMode;
+    return (PyObject *)self;
+}
+
+static int
+Percent_init(Percent *self, PyObject *args, PyObject *kwds)
+{
+    PyObject *inputtmp, *input_streamtmp, *percenttmp, *multmp=NULL, *addtmp=NULL;
+    
+    static char *kwlist[] = {"input", "percent", "mul", "add", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O|OOO", kwlist, &inputtmp, &percenttmp, &multmp, &addtmp))
+        return -1; 
+    
+    INIT_INPUT_STREAM
+    
+    if (percenttmp) {
+        PyObject_CallMethod((PyObject *)self, "setPercent", "O", percenttmp);
+    }
+    if (multmp) {
+        PyObject_CallMethod((PyObject *)self, "setMul", "O", multmp);
+    }
+    
+    if (addtmp) {
+        PyObject_CallMethod((PyObject *)self, "setAdd", "O", addtmp);
+    }
+    
+    Py_INCREF(self->stream);
+    PyObject_CallMethod(self->server, "addStream", "O", self->stream);
+    
+    srand((unsigned)(time(0)));
+
+    (*self->mode_func_ptr)(self);
+    
+    Py_INCREF(self);
+    return 0;
+}
+
+static PyObject * Percent_getServer(Percent* self) { GET_SERVER };
+static PyObject * Percent_getStream(Percent* self) { GET_STREAM };
+static PyObject * Percent_setMul(Percent *self, PyObject *arg) { SET_MUL };	
+static PyObject * Percent_setAdd(Percent *self, PyObject *arg) { SET_ADD };	
+static PyObject * Percent_setSub(Percent *self, PyObject *arg) { SET_SUB };	
+static PyObject * Percent_setDiv(Percent *self, PyObject *arg) { SET_DIV };	
+
+static PyObject * Percent_play(Percent *self, PyObject *args, PyObject *kwds) { PLAY };
+static PyObject * Percent_stop(Percent *self) { STOP };
+
+static PyObject * Percent_multiply(Percent *self, PyObject *arg) { MULTIPLY };
+static PyObject * Percent_inplace_multiply(Percent *self, PyObject *arg) { INPLACE_MULTIPLY };
+static PyObject * Percent_add(Percent *self, PyObject *arg) { ADD };
+static PyObject * Percent_inplace_add(Percent *self, PyObject *arg) { INPLACE_ADD };
+static PyObject * Percent_sub(Percent *self, PyObject *arg) { SUB };
+static PyObject * Percent_inplace_sub(Percent *self, PyObject *arg) { INPLACE_SUB };
+static PyObject * Percent_div(Percent *self, PyObject *arg) { DIV };
+static PyObject * Percent_inplace_div(Percent *self, PyObject *arg) { INPLACE_DIV };
+
+static PyObject *
+Percent_setPercent(Percent *self, PyObject *arg)
+{
+	PyObject *tmp, *streamtmp;
+	
+	if (arg == NULL) {
+		Py_INCREF(Py_None);
+		return Py_None;
+	}
+    
+	int isNumber = PyNumber_Check(arg);
+	
+	tmp = arg;
+	Py_INCREF(tmp);
+	Py_DECREF(self->percent);
+	if (isNumber == 1) {
+		self->percent = PyNumber_Float(tmp);
+        self->modebuffer[2] = 0;
+	}
+	else {
+		self->percent = tmp;
+        streamtmp = PyObject_CallMethod((PyObject *)self->percent, "_getStream", NULL);
+        Py_INCREF(streamtmp);
+        Py_XDECREF(self->percent_stream);
+        self->percent_stream = (Stream *)streamtmp;
+		self->modebuffer[2] = 1;
+	}
+    
+    (*self->mode_func_ptr)(self);
+    
+	Py_INCREF(Py_None);
+	return Py_None;
+}	
+
+static PyMemberDef Percent_members[] = {
+    {"server", T_OBJECT_EX, offsetof(Percent, server), 0, "Pyo server."},
+    {"stream", T_OBJECT_EX, offsetof(Percent, stream), 0, "Stream object."},
+    {"input", T_OBJECT_EX, offsetof(Percent, input), 0, "Input sound object."},
+    {"percent", T_OBJECT_EX, offsetof(Percent, percent), 0, "percent attribute."},
+    {"mul", T_OBJECT_EX, offsetof(Percent, mul), 0, "Mul factor."},
+    {"add", T_OBJECT_EX, offsetof(Percent, add), 0, "Add factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyMethodDef Percent_methods[] = {
+    {"getServer", (PyCFunction)Percent_getServer, METH_NOARGS, "Returns server object."},
+    {"_getStream", (PyCFunction)Percent_getStream, METH_NOARGS, "Returns stream object."},
+    {"deleteStream", (PyCFunction)Percent_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
+    {"play", (PyCFunction)Percent_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
+    {"stop", (PyCFunction)Percent_stop, METH_NOARGS, "Stops computing."},
+    {"setPercent", (PyCFunction)Percent_setPercent, METH_O, "Sets percentange value."},
+    {"setMul", (PyCFunction)Percent_setMul, METH_O, "Sets mul factor."},
+    {"setAdd", (PyCFunction)Percent_setAdd, METH_O, "Sets add factor."},
+    {"setSub", (PyCFunction)Percent_setSub, METH_O, "Sets inverse add factor."},
+    {"setDiv", (PyCFunction)Percent_setDiv, METH_O, "Sets inverse mul factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyNumberMethods Percent_as_number = {
+    (binaryfunc)Percent_add,                         /*nb_add*/
+    (binaryfunc)Percent_sub,                         /*nb_subtract*/
+    (binaryfunc)Percent_multiply,                    /*nb_multiply*/
+    (binaryfunc)Percent_div,                                              /*nb_divide*/
+    0,                                              /*nb_remainder*/
+    0,                                              /*nb_divmod*/
+    0,                                              /*nb_power*/
+    0,                                              /*nb_neg*/
+    0,                                              /*nb_pos*/
+    0,                                              /*(unaryfunc)array_abs,*/
+    0,                                              /*nb_nonzero*/
+    0,                                              /*nb_invert*/
+    0,                                              /*nb_lshift*/
+    0,                                              /*nb_rshift*/
+    0,                                              /*nb_and*/
+    0,                                              /*nb_xor*/
+    0,                                              /*nb_or*/
+    0,                                              /*nb_coerce*/
+    0,                                              /*nb_int*/
+    0,                                              /*nb_long*/
+    0,                                              /*nb_float*/
+    0,                                              /*nb_oct*/
+    0,                                              /*nb_hex*/
+    (binaryfunc)Percent_inplace_add,                 /*inplace_add*/
+    (binaryfunc)Percent_inplace_sub,                 /*inplace_subtract*/
+    (binaryfunc)Percent_inplace_multiply,            /*inplace_multiply*/
+    (binaryfunc)Percent_inplace_div,                                              /*inplace_divide*/
+    0,                                              /*inplace_remainder*/
+    0,                                              /*inplace_power*/
+    0,                                              /*inplace_lshift*/
+    0,                                              /*inplace_rshift*/
+    0,                                              /*inplace_and*/
+    0,                                              /*inplace_xor*/
+    0,                                              /*inplace_or*/
+    0,                                              /*nb_floor_divide*/
+    0,                                              /*nb_true_divide*/
+    0,                                              /*nb_inplace_floor_divide*/
+    0,                                              /*nb_inplace_true_divide*/
+    0,                                              /* nb_index */
+};
+
+PyTypeObject PercentType = {
+    PyObject_HEAD_INIT(NULL)
+    0,                                              /*ob_size*/
+    "_pyo.Percent_base",                                   /*tp_name*/
+    sizeof(Percent),                                 /*tp_basicsize*/
+    0,                                              /*tp_itemsize*/
+    (destructor)Percent_dealloc,                     /*tp_dealloc*/
+    0,                                              /*tp_print*/
+    0,                                              /*tp_getattr*/
+    0,                                              /*tp_setattr*/
+    0,                                              /*tp_compare*/
+    0,                                              /*tp_repr*/
+    &Percent_as_number,                              /*tp_as_number*/
+    0,                                              /*tp_as_sequence*/
+    0,                                              /*tp_as_mapping*/
+    0,                                              /*tp_hash */
+    0,                                              /*tp_call*/
+    0,                                              /*tp_str*/
+    0,                                              /*tp_getattro*/
+    0,                                              /*tp_setattro*/
+    0,                                              /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES, /*tp_flags*/
+    "Percent objects. Looks for input triggers and sets how much percentage of it to let pass.",           /* tp_doc */
+    (traverseproc)Percent_traverse,                  /* tp_traverse */
+    (inquiry)Percent_clear,                          /* tp_clear */
+    0,                                              /* tp_richcompare */
+    0,                                              /* tp_weaklistoffset */
+    0,                                              /* tp_iter */
+    0,                                              /* tp_iternext */
+    Percent_methods,                                 /* tp_methods */
+    Percent_members,                                 /* tp_members */
+    0,                                              /* tp_getset */
+    0,                                              /* tp_base */
+    0,                                              /* tp_dict */
+    0,                                              /* tp_descr_get */
+    0,                                              /* tp_descr_set */
+    0,                                              /* tp_dictoffset */
+    (initproc)Percent_init,                          /* tp_init */
+    0,                                              /* tp_alloc */
+    Percent_new,                                     /* tp_new */
 };

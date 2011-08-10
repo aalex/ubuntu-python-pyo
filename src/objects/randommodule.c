@@ -34,21 +34,21 @@ typedef struct {
     Stream *min_stream;
     Stream *max_stream;
     Stream *freq_stream;
-    float value;
-    float oldValue;
-    float diff;
-    float time;
+    MYFLT value;
+    MYFLT oldValue;
+    MYFLT diff;
+    MYFLT time;
     int modebuffer[5]; // need at least 2 slots for mul & add 
 } Randi;
 
 static void
 Randi_generate_iii(Randi *self) {
     int i;
-    float inc;
-    float mi = PyFloat_AS_DOUBLE(self->min);
-    float ma = PyFloat_AS_DOUBLE(self->max);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
-    float range = ma - mi;
+    MYFLT inc;
+    MYFLT mi = PyFloat_AS_DOUBLE(self->min);
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT range = ma - mi;
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -58,7 +58,7 @@ Randi_generate_iii(Randi *self) {
         else if (self->time >= 1.0) {
             self->time -= 1.0;
             self->oldValue = self->value;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi;
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi;
             self->diff = self->value - self->oldValue;
         }
         self->data[i] = self->oldValue + self->diff * self->time;
@@ -68,10 +68,10 @@ Randi_generate_iii(Randi *self) {
 static void
 Randi_generate_aii(Randi *self) {
     int i;
-    float inc, range;
-    float *mi = Stream_getData((Stream *)self->min_stream);
-    float ma = PyFloat_AS_DOUBLE(self->max);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT inc, range;
+    MYFLT *mi = Stream_getData((Stream *)self->min_stream);
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -82,7 +82,7 @@ Randi_generate_aii(Randi *self) {
         else if (self->time >= 1.0) {
             self->time -= 1.0;
             self->oldValue = self->value;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi[i];
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi[i];
             self->diff = self->value - self->oldValue;
         }
         self->data[i] = self->oldValue + self->diff * self->time;
@@ -92,10 +92,10 @@ Randi_generate_aii(Randi *self) {
 static void
 Randi_generate_iai(Randi *self) {
     int i;
-    float inc, range;
-    float mi = PyFloat_AS_DOUBLE(self->min);
-    float *ma = Stream_getData((Stream *)self->max_stream);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT inc, range;
+    MYFLT mi = PyFloat_AS_DOUBLE(self->min);
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -106,7 +106,7 @@ Randi_generate_iai(Randi *self) {
         else if (self->time >= 1.0) {
             self->time -= 1.0;
             self->oldValue = self->value;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi;
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi;
             self->diff = self->value - self->oldValue;
         }
         self->data[i] = self->oldValue + self->diff * self->time;
@@ -116,10 +116,10 @@ Randi_generate_iai(Randi *self) {
 static void
 Randi_generate_aai(Randi *self) {
     int i;
-    float inc, range;
-    float *mi = Stream_getData((Stream *)self->min_stream);
-    float *ma = Stream_getData((Stream *)self->max_stream);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT inc, range;
+    MYFLT *mi = Stream_getData((Stream *)self->min_stream);
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -130,7 +130,7 @@ Randi_generate_aai(Randi *self) {
         else if (self->time >= 1.0) {
             self->time -= 1.0;
             self->oldValue = self->value;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi[i];
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi[i];
             self->diff = self->value - self->oldValue;
         }
         self->data[i] = self->oldValue + self->diff * self->time;
@@ -140,11 +140,11 @@ Randi_generate_aai(Randi *self) {
 static void
 Randi_generate_iia(Randi *self) {
     int i;
-    float inc;
-    float mi = PyFloat_AS_DOUBLE(self->min);
-    float ma = PyFloat_AS_DOUBLE(self->max);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
-    float range = ma - mi;
+    MYFLT inc;
+    MYFLT mi = PyFloat_AS_DOUBLE(self->min);
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT range = ma - mi;
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -154,7 +154,7 @@ Randi_generate_iia(Randi *self) {
         else if (self->time >= 1.0) {
             self->time -= 1.0;
             self->oldValue = self->value;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi;
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi;
             self->diff = self->value - self->oldValue;
         }
         self->data[i] = self->oldValue + self->diff * self->time;
@@ -164,10 +164,10 @@ Randi_generate_iia(Randi *self) {
 static void
 Randi_generate_aia(Randi *self) {
     int i;
-    float inc, range;
-    float *mi = Stream_getData((Stream *)self->min_stream);
-    float ma = PyFloat_AS_DOUBLE(self->max);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT inc, range;
+    MYFLT *mi = Stream_getData((Stream *)self->min_stream);
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -178,7 +178,7 @@ Randi_generate_aia(Randi *self) {
         else if (self->time >= 1.0) {
             self->time -= 1.0;
             self->oldValue = self->value;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi[i];
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi[i];
             self->diff = self->value - self->oldValue;
         }
         self->data[i] = self->oldValue + self->diff * self->time;
@@ -188,10 +188,10 @@ Randi_generate_aia(Randi *self) {
 static void
 Randi_generate_iaa(Randi *self) {
     int i;
-    float inc, range;
-    float mi = PyFloat_AS_DOUBLE(self->min);
-    float *ma = Stream_getData((Stream *)self->max_stream);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT inc, range;
+    MYFLT mi = PyFloat_AS_DOUBLE(self->min);
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -202,7 +202,7 @@ Randi_generate_iaa(Randi *self) {
         else if (self->time >= 1.0) {
             self->time -= 1.0;
             self->oldValue = self->value;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi;
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi;
             self->diff = self->value - self->oldValue;
         }
         self->data[i] = self->oldValue + self->diff * self->time;
@@ -212,10 +212,10 @@ Randi_generate_iaa(Randi *self) {
 static void
 Randi_generate_aaa(Randi *self) {
     int i;
-    float inc, range;
-    float *mi = Stream_getData((Stream *)self->min_stream);
-    float *ma = Stream_getData((Stream *)self->max_stream);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT inc, range;
+    MYFLT *mi = Stream_getData((Stream *)self->min_stream);
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -226,7 +226,7 @@ Randi_generate_aaa(Randi *self) {
         else if (self->time >= 1.0) {
             self->time -= 1.0;
             self->oldValue = self->value;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi[i];
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi[i];
             self->diff = self->value - self->oldValue;
         }
         self->data[i] = self->oldValue + self->diff * self->time;
@@ -354,6 +354,7 @@ static PyObject * Randi_deleteStream(Randi *self) { DELETE_STREAM };
 static PyObject *
 Randi_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Randi *self;
     self = (Randi *)type->tp_alloc(type, 0);
     
@@ -377,7 +378,7 @@ Randi_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 static int
 Randi_init(Randi *self, PyObject *args, PyObject *kwds)
 {
-    float mi, ma;
+    MYFLT mi, ma;
     PyObject *mintmp=NULL, *maxtmp=NULL, *freqtmp=NULL, *multmp=NULL, *addtmp=NULL;
     
     static char *kwlist[] = {"min", "max", "freq", "mul", "add", NULL};
@@ -421,9 +422,7 @@ Randi_init(Randi *self, PyObject *args, PyObject *kwds)
     self->value = self->oldValue = (mi + ma) * 0.5;
 
     (*self->mode_func_ptr)(self);
-    
-    Randi_compute_next_data_frame((Randi *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -435,7 +434,7 @@ static PyObject * Randi_setAdd(Randi *self, PyObject *arg) { SET_ADD };
 static PyObject * Randi_setSub(Randi *self, PyObject *arg) { SET_SUB };	
 static PyObject * Randi_setDiv(Randi *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * Randi_play(Randi *self) { PLAY };
+static PyObject * Randi_play(Randi *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Randi_out(Randi *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * Randi_stop(Randi *self) { STOP };
 
@@ -565,7 +564,7 @@ static PyMethodDef Randi_methods[] = {
 {"getServer", (PyCFunction)Randi_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Randi_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Randi_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Randi_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Randi_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"out", (PyCFunction)Randi_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)Randi_stop, METH_NOARGS, "Stops computing."},
 {"setMin", (PyCFunction)Randi_setMin, METH_O, "Sets minimum possible value."},
@@ -673,19 +672,19 @@ typedef struct {
     Stream *min_stream;
     Stream *max_stream;
     Stream *freq_stream;
-    float value;
-    float time;
+    MYFLT value;
+    MYFLT time;
     int modebuffer[5]; // need at least 2 slots for mul & add 
 } Randh;
 
 static void
 Randh_generate_iii(Randh *self) {
     int i;
-    float inc;
-    float mi = PyFloat_AS_DOUBLE(self->min);
-    float ma = PyFloat_AS_DOUBLE(self->max);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
-    float range = ma - mi;
+    MYFLT inc;
+    MYFLT mi = PyFloat_AS_DOUBLE(self->min);
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT range = ma - mi;
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -694,7 +693,7 @@ Randh_generate_iii(Randh *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi;
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi;
         }
         self->data[i] = self->value;
     }
@@ -703,10 +702,10 @@ Randh_generate_iii(Randh *self) {
 static void
 Randh_generate_aii(Randh *self) {
     int i;
-    float inc, range;
-    float *mi = Stream_getData((Stream *)self->min_stream);
-    float ma = PyFloat_AS_DOUBLE(self->max);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT inc, range;
+    MYFLT *mi = Stream_getData((Stream *)self->min_stream);
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -716,7 +715,7 @@ Randh_generate_aii(Randh *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi[i];
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi[i];
         }
         self->data[i] = self->value;
     }
@@ -725,10 +724,10 @@ Randh_generate_aii(Randh *self) {
 static void
 Randh_generate_iai(Randh *self) {
     int i;
-    float inc, range;
-    float mi = PyFloat_AS_DOUBLE(self->min);
-    float *ma = Stream_getData((Stream *)self->max_stream);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT inc, range;
+    MYFLT mi = PyFloat_AS_DOUBLE(self->min);
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -738,7 +737,7 @@ Randh_generate_iai(Randh *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi;
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi;
         }
         self->data[i] = self->value;
     }
@@ -747,10 +746,10 @@ Randh_generate_iai(Randh *self) {
 static void
 Randh_generate_aai(Randh *self) {
     int i;
-    float inc, range;
-    float *mi = Stream_getData((Stream *)self->min_stream);
-    float *ma = Stream_getData((Stream *)self->max_stream);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT inc, range;
+    MYFLT *mi = Stream_getData((Stream *)self->min_stream);
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -760,7 +759,7 @@ Randh_generate_aai(Randh *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi[i];
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi[i];
         }
         self->data[i] = self->value;
     }
@@ -769,11 +768,11 @@ Randh_generate_aai(Randh *self) {
 static void
 Randh_generate_iia(Randh *self) {
     int i;
-    float inc;
-    float mi = PyFloat_AS_DOUBLE(self->min);
-    float ma = PyFloat_AS_DOUBLE(self->max);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
-    float range = ma - mi;
+    MYFLT inc;
+    MYFLT mi = PyFloat_AS_DOUBLE(self->min);
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT range = ma - mi;
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -782,7 +781,7 @@ Randh_generate_iia(Randh *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi;
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi;
         }
         self->data[i] = self->value;
     }
@@ -791,10 +790,10 @@ Randh_generate_iia(Randh *self) {
 static void
 Randh_generate_aia(Randh *self) {
     int i;
-    float inc, range;
-    float *mi = Stream_getData((Stream *)self->min_stream);
-    float ma = PyFloat_AS_DOUBLE(self->max);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT inc, range;
+    MYFLT *mi = Stream_getData((Stream *)self->min_stream);
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -804,7 +803,7 @@ Randh_generate_aia(Randh *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi[i];
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi[i];
         }
         self->data[i] = self->value;
     }
@@ -813,10 +812,10 @@ Randh_generate_aia(Randh *self) {
 static void
 Randh_generate_iaa(Randh *self) {
     int i;
-    float inc, range;
-    float mi = PyFloat_AS_DOUBLE(self->min);
-    float *ma = Stream_getData((Stream *)self->max_stream);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT inc, range;
+    MYFLT mi = PyFloat_AS_DOUBLE(self->min);
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -826,7 +825,7 @@ Randh_generate_iaa(Randh *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi;
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi;
         }
         self->data[i] = self->value;
     }
@@ -835,10 +834,10 @@ Randh_generate_iaa(Randh *self) {
 static void
 Randh_generate_aaa(Randh *self) {
     int i;
-    float inc, range;
-    float *mi = Stream_getData((Stream *)self->min_stream);
-    float *ma = Stream_getData((Stream *)self->max_stream);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT inc, range;
+    MYFLT *mi = Stream_getData((Stream *)self->min_stream);
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -848,7 +847,7 @@ Randh_generate_aaa(Randh *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = range * (rand()/((float)(RAND_MAX)+1)) + mi[i];
+            self->value = range * (rand()/((MYFLT)(RAND_MAX)+1)) + mi[i];
         }
         self->data[i] = self->value;
     }
@@ -975,6 +974,7 @@ static PyObject * Randh_deleteStream(Randh *self) { DELETE_STREAM };
 static PyObject *
 Randh_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Randh *self;
     self = (Randh *)type->tp_alloc(type, 0);
     
@@ -998,7 +998,7 @@ Randh_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 static int
 Randh_init(Randh *self, PyObject *args, PyObject *kwds)
 {
-    float mi, ma;
+    MYFLT mi, ma;
     PyObject *mintmp=NULL, *maxtmp=NULL, *freqtmp=NULL, *multmp=NULL, *addtmp=NULL;
     
     static char *kwlist[] = {"min", "max", "freq", "mul", "add", NULL};
@@ -1042,9 +1042,7 @@ Randh_init(Randh *self, PyObject *args, PyObject *kwds)
     self->value = (mi + ma) * 0.5;
     
     (*self->mode_func_ptr)(self);
-    
-    Randh_compute_next_data_frame((Randh *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -1056,7 +1054,7 @@ static PyObject * Randh_setAdd(Randh *self, PyObject *arg) { SET_ADD };
 static PyObject * Randh_setSub(Randh *self, PyObject *arg) { SET_SUB };	
 static PyObject * Randh_setDiv(Randh *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * Randh_play(Randh *self) { PLAY };
+static PyObject * Randh_play(Randh *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Randh_out(Randh *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * Randh_stop(Randh *self) { STOP };
 
@@ -1186,7 +1184,7 @@ static PyMethodDef Randh_methods[] = {
 {"getServer", (PyCFunction)Randh_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Randh_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Randh_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Randh_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Randh_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"out", (PyCFunction)Randh_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)Randh_stop, METH_NOARGS, "Stops computing."},
 {"setMin", (PyCFunction)Randh_setMin, METH_O, "Sets minimum possible value."},
@@ -1291,17 +1289,17 @@ typedef struct {
     PyObject *freq;
     Stream *freq_stream;
     int chSize;
-    float *choice;
-    float value;
-    float time;
+    MYFLT *choice;
+    MYFLT value;
+    MYFLT time;
     int modebuffer[3]; // need at least 2 slots for mul & add 
 } Choice;
 
 static void
 Choice_generate_i(Choice *self) {
     int i;
-    float inc;
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT inc;
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -1310,7 +1308,7 @@ Choice_generate_i(Choice *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = self->choice[(int)((rand()/((float)(RAND_MAX))) * self->chSize)];
+            self->value = self->choice[(int)((rand()/((MYFLT)(RAND_MAX))) * self->chSize)];
         }
         self->data[i] = self->value;
     }
@@ -1319,8 +1317,8 @@ Choice_generate_i(Choice *self) {
 static void
 Choice_generate_a(Choice *self) {
     int i;
-    float inc;
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT inc;
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -1329,7 +1327,7 @@ Choice_generate_a(Choice *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = self->choice[(int)((rand()/((float)(RAND_MAX))) * self->chSize)];
+            self->value = self->choice[(int)((rand()/((MYFLT)(RAND_MAX))) * self->chSize)];
         }
         self->data[i] = self->value;
     }
@@ -1431,6 +1429,7 @@ static PyObject * Choice_deleteStream(Choice *self) { DELETE_STREAM };
 static PyObject *
 Choice_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     Choice *self;
     self = (Choice *)type->tp_alloc(type, 0);
     
@@ -1477,9 +1476,7 @@ Choice_init(Choice *self, PyObject *args, PyObject *kwds)
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
     
     (*self->mode_func_ptr)(self);
-    
-    Choice_compute_next_data_frame((Choice *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -1491,7 +1488,7 @@ static PyObject * Choice_setAdd(Choice *self, PyObject *arg) { SET_ADD };
 static PyObject * Choice_setSub(Choice *self, PyObject *arg) { SET_SUB };	
 static PyObject * Choice_setDiv(Choice *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * Choice_play(Choice *self) { PLAY };
+static PyObject * Choice_play(Choice *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Choice_out(Choice *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * Choice_stop(Choice *self) { STOP };
 
@@ -1518,7 +1515,7 @@ Choice_setChoice(Choice *self, PyObject *arg)
     
     tmp = arg;
     self->chSize = PyList_Size(tmp);
-    self->choice = (float *)realloc(self->choice, self->chSize * sizeof(float));
+    self->choice = (MYFLT *)realloc(self->choice, self->chSize * sizeof(MYFLT));
     for (i=0; i<self->chSize; i++) {
         self->choice[i] = PyFloat_AS_DOUBLE(PyNumber_Float(PyList_GET_ITEM(tmp, i)));
     }
@@ -1576,7 +1573,7 @@ static PyMethodDef Choice_methods[] = {
 {"getServer", (PyCFunction)Choice_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)Choice_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Choice_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)Choice_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)Choice_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"out", (PyCFunction)Choice_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)Choice_stop, METH_NOARGS, "Stops computing."},
 {"setChoice", (PyCFunction)Choice_setChoice, METH_O, "Sets list of possible floats."},
@@ -1681,17 +1678,17 @@ typedef struct {
     PyObject *freq;
     Stream *max_stream;
     Stream *freq_stream;
-    float value;
-    float time;
+    MYFLT value;
+    MYFLT time;
     int modebuffer[5]; // need at least 2 slots for mul & add 
 } RandInt;
 
 static void
 RandInt_generate_ii(RandInt *self) {
     int i;
-    float inc;
-    float ma = PyFloat_AS_DOUBLE(self->max);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT inc;
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -1700,7 +1697,7 @@ RandInt_generate_ii(RandInt *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = (float)((int)(rand()/((float)(RAND_MAX)+1)*ma));
+            self->value = (MYFLT)((int)(rand()/((MYFLT)(RAND_MAX)+1)*ma));
         }
         self->data[i] = self->value;
     }
@@ -1709,9 +1706,9 @@ RandInt_generate_ii(RandInt *self) {
 static void
 RandInt_generate_ai(RandInt *self) {
     int i;
-    float inc;
-    float *ma = Stream_getData((Stream *)self->max_stream);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT inc;
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -1720,7 +1717,7 @@ RandInt_generate_ai(RandInt *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = (float)((int)(rand()/((float)(RAND_MAX)+1)*ma[i]));
+            self->value = (MYFLT)((int)(rand()/((MYFLT)(RAND_MAX)+1)*ma[i]));
         }
         self->data[i] = self->value;
     }
@@ -1729,9 +1726,9 @@ RandInt_generate_ai(RandInt *self) {
 static void
 RandInt_generate_ia(RandInt *self) {
     int i;
-    float inc;
-    float ma = PyFloat_AS_DOUBLE(self->max);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT inc;
+    MYFLT ma = PyFloat_AS_DOUBLE(self->max);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -1740,7 +1737,7 @@ RandInt_generate_ia(RandInt *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = (float)((int)(rand()/((float)(RAND_MAX)+1)*ma));
+            self->value = (MYFLT)((int)(rand()/((MYFLT)(RAND_MAX)+1)*ma));
         }
         self->data[i] = self->value;
     }
@@ -1749,9 +1746,9 @@ RandInt_generate_ia(RandInt *self) {
 static void
 RandInt_generate_aa(RandInt *self) {
     int i;
-    float inc;
-    float *ma = Stream_getData((Stream *)self->max_stream);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT inc;
+    MYFLT *ma = Stream_getData((Stream *)self->max_stream);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -1760,7 +1757,7 @@ RandInt_generate_aa(RandInt *self) {
             self->time += 1.0;
         else if (self->time >= 1.0) {
             self->time -= 1.0;
-            self->value = (float)((int)(rand()/((float)(RAND_MAX)+1)*ma[i]));
+            self->value = (MYFLT)((int)(rand()/((MYFLT)(RAND_MAX)+1)*ma[i]));
         }
         self->data[i] = self->value;
     }
@@ -1871,6 +1868,7 @@ static PyObject * RandInt_deleteStream(RandInt *self) { DELETE_STREAM };
 static PyObject *
 RandInt_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    int i;
     RandInt *self;
     self = (RandInt *)type->tp_alloc(type, 0);
     
@@ -1919,9 +1917,7 @@ RandInt_init(RandInt *self, PyObject *args, PyObject *kwds)
     PyObject_CallMethod(self->server, "addStream", "O", self->stream);
 
     (*self->mode_func_ptr)(self);
-    
-    RandInt_compute_next_data_frame((RandInt *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -1933,7 +1929,7 @@ static PyObject * RandInt_setAdd(RandInt *self, PyObject *arg) { SET_ADD };
 static PyObject * RandInt_setSub(RandInt *self, PyObject *arg) { SET_SUB };	
 static PyObject * RandInt_setDiv(RandInt *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * RandInt_play(RandInt *self) { PLAY };
+static PyObject * RandInt_play(RandInt *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * RandInt_out(RandInt *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * RandInt_stop(RandInt *self) { STOP };
 
@@ -2028,7 +2024,7 @@ static PyMethodDef RandInt_methods[] = {
 {"getServer", (PyCFunction)RandInt_getServer, METH_NOARGS, "Returns server object."},
 {"_getStream", (PyCFunction)RandInt_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)RandInt_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-{"play", (PyCFunction)RandInt_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+{"play", (PyCFunction)RandInt_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
 {"out", (PyCFunction)RandInt_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)RandInt_stop, METH_NOARGS, "Stops computing."},
 {"setMax", (PyCFunction)RandInt_setMax, METH_O, "Sets maximum possible value."},
@@ -2135,17 +2131,17 @@ typedef struct {
     Stream *x1_stream;
     Stream *x2_stream;
     Stream *freq_stream;
-    float (*type_func_ptr)();
-    float xx1;
-    float xx2;
+    MYFLT (*type_func_ptr)();
+    MYFLT xx1;
+    MYFLT xx2;
     int type;
-    float value;
-    float time;
-    float lastPoissonX1;
+    MYFLT value;
+    MYFLT time;
+    MYFLT lastPoissonX1;
     int poisson_tab;
-    float poisson_buffer[2000];
-    float walkerValue;
-    float loop_buffer[15];
+    MYFLT poisson_buffer[2000];
+    MYFLT walkerValue;
+    MYFLT loop_buffer[15];
     int loopChoice;
     int loopCountPlay;
     int loopTime;
@@ -2156,59 +2152,59 @@ typedef struct {
 } Xnoise;
 
 // no parameter
-static float
+static MYFLT
 Xnoise_uniform(Xnoise *self) {
     return RANDOM_UNIFORM;    
 }
 
-static float
+static MYFLT
 Xnoise_linear_min(Xnoise *self) {
-    float a = RANDOM_UNIFORM;    
-    float b = RANDOM_UNIFORM;
+    MYFLT a = RANDOM_UNIFORM;    
+    MYFLT b = RANDOM_UNIFORM;
     if (a < b) return a;
     else return b;
 }
 
-static float
+static MYFLT
 Xnoise_linear_max(Xnoise *self) {
-    float a = RANDOM_UNIFORM;    
-    float b = RANDOM_UNIFORM;
+    MYFLT a = RANDOM_UNIFORM;    
+    MYFLT b = RANDOM_UNIFORM;
     if (a > b) return a;
     else return b;
 }
 
-static float
+static MYFLT
 Xnoise_triangle(Xnoise *self) {
-    float a = RANDOM_UNIFORM;    
-    float b = RANDOM_UNIFORM;
+    MYFLT a = RANDOM_UNIFORM;    
+    MYFLT b = RANDOM_UNIFORM;
     return ((a + b) * 0.5);
 }
 
 // x1 = slope
-static float
+static MYFLT
 Xnoise_expon_min(Xnoise *self) {
     if (self->xx1 <= 0.0) self->xx1 = 0.00001;
-    float val = -logf(RANDOM_UNIFORM) / self->xx1;    
+    MYFLT val = -MYLOG(RANDOM_UNIFORM) / self->xx1;    
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
     else return val;
 }
 
-static float
+static MYFLT
 Xnoise_expon_max(Xnoise *self) {
     if (self->xx1 <= 0.0) self->xx1 = 0.00001;
-    float val = 1.0 - (-logf(RANDOM_UNIFORM) / self->xx1);    
+    MYFLT val = 1.0 - (-MYLOG(RANDOM_UNIFORM) / self->xx1);    
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
     else return val;
 }
 
 // x1 = bandwidth
-static float
+static MYFLT
 Xnoise_biexpon(Xnoise *self) {
-    float polar, val;
+    MYFLT polar, val;
     if (self->xx1 <= 0.0) self->xx1 = 0.00001;
-    float sum = RANDOM_UNIFORM * 2.0;
+    MYFLT sum = RANDOM_UNIFORM * 2.0;
     
     if (sum > 1.0) {
         polar = -1;
@@ -2217,16 +2213,16 @@ Xnoise_biexpon(Xnoise *self) {
     else
         polar = 1;
 
-    val = 0.5 * (polar * logf(sum) / self->xx1) + 0.5;
+    val = 0.5 * (polar * MYLOG(sum) / self->xx1) + 0.5;
 
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
     else return val;
 }
 
-static float
+static MYFLT
 Xnoise_cauchy(Xnoise *self) {
-    float rnd, val, dir;
+    MYFLT rnd, val, dir;
     do {
         rnd = RANDOM_UNIFORM;
     }
@@ -2237,7 +2233,7 @@ Xnoise_cauchy(Xnoise *self) {
     else
         dir = 1;
     
-    val = 0.5 * (tanf(rnd) * self->xx1 * dir) + 0.5;
+    val = 0.5 * (MYTAN(rnd) * self->xx1 * dir) + 0.5;
     
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
@@ -2245,13 +2241,13 @@ Xnoise_cauchy(Xnoise *self) {
 }
 
 // x1 = locator, x2 = shape
-static float
+static MYFLT
 Xnoise_weibull(Xnoise *self) {
-    float rnd, val;
+    MYFLT rnd, val;
     if (self->xx2 <= 0.0) self->xx2 = 0.00001;
     
     rnd = 1.0 / (1.0 - RANDOM_UNIFORM);
-    val = self->xx1 * powf(logf(rnd), (1.0 / self->xx2));
+    val = self->xx1 * MYPOW(MYLOG(rnd), (1.0 / self->xx2));
     
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
@@ -2259,9 +2255,9 @@ Xnoise_weibull(Xnoise *self) {
 }
 
 // x1 = locator, x2 = bandwidth
-static float
+static MYFLT
 Xnoise_gaussian(Xnoise *self) {
-    float rnd, val;
+    MYFLT rnd, val;
     
     rnd = (RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM);
     val = (self->xx2 * (rnd - 3.0) * 0.33 + self->xx1);
@@ -2272,11 +2268,11 @@ Xnoise_gaussian(Xnoise *self) {
 }
 
 // x1 = gravity center, x2 = compress/expand
-static float
+static MYFLT
 Xnoise_poisson(Xnoise *self) {
     int i, j, factorial;
     long tot;
-    float val;
+    MYFLT val;
     if (self->xx1 < 0.1) self->xx1 = 0.1;
     if (self->xx2 < 0.1) self->xx2 = 0.1;
 
@@ -2286,7 +2282,7 @@ Xnoise_poisson(Xnoise *self) {
         factorial = 1;
         for (i=1; i<12; i++) {
             factorial *= i;
-            tot = (long)(1000.0 * (powf(2.7182818, -self->xx1) * powf(self->xx1, i) / factorial));
+            tot = (long)(1000.0 * (MYPOW(2.7182818, -self->xx1) * MYPOW(self->xx1, i) / factorial));
             for (j=0; j<tot; j++) {
                 self->poisson_buffer[self->poisson_tab] = i;
                 self->poisson_tab++;
@@ -2301,7 +2297,7 @@ Xnoise_poisson(Xnoise *self) {
 }
 
 // x1 = max value, x2 = max step
-static float
+static MYFLT
 Xnoise_walker(Xnoise *self) {
     int modulo, dir;
     
@@ -2324,7 +2320,7 @@ Xnoise_walker(Xnoise *self) {
 }
 
 // x1 = max value, x2 = max step
-static float
+static MYFLT
 Xnoise_loopseg(Xnoise *self) {
     int modulo, dir;
 
@@ -2380,10 +2376,10 @@ Xnoise_loopseg(Xnoise *self) {
 static void
 Xnoise_generate_iii(Xnoise *self) {
     int i;
-    float inc;
+    MYFLT inc;
     self->xx1 = PyFloat_AS_DOUBLE(self->x1);
     self->xx2 = PyFloat_AS_DOUBLE(self->x2);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
 
     for (i=0; i<self->bufsize; i++) {
@@ -2401,10 +2397,10 @@ Xnoise_generate_iii(Xnoise *self) {
 static void
 Xnoise_generate_aii(Xnoise *self) {
     int i;
-    float inc;
-    float *x1 = Stream_getData((Stream *)self->x1_stream);
+    MYFLT inc;
+    MYFLT *x1 = Stream_getData((Stream *)self->x1_stream);
     self->xx2 = PyFloat_AS_DOUBLE(self->x2);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -2423,10 +2419,10 @@ Xnoise_generate_aii(Xnoise *self) {
 static void
 Xnoise_generate_iai(Xnoise *self) {
     int i;
-    float inc;
+    MYFLT inc;
     self->xx1 = PyFloat_AS_DOUBLE(self->x1);
-    float *x2 = Stream_getData((Stream *)self->x2_stream);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT *x2 = Stream_getData((Stream *)self->x2_stream);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -2445,10 +2441,10 @@ Xnoise_generate_iai(Xnoise *self) {
 static void
 Xnoise_generate_aai(Xnoise *self) {
     int i;
-    float inc;
-    float *x1 = Stream_getData((Stream *)self->x1_stream);
-    float *x2 = Stream_getData((Stream *)self->x2_stream);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT inc;
+    MYFLT *x1 = Stream_getData((Stream *)self->x1_stream);
+    MYFLT *x2 = Stream_getData((Stream *)self->x2_stream);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -2468,10 +2464,10 @@ Xnoise_generate_aai(Xnoise *self) {
 static void
 Xnoise_generate_iia(Xnoise *self) {
     int i;
-    float inc;
+    MYFLT inc;
     self->xx1 = PyFloat_AS_DOUBLE(self->x1);
     self->xx2 = PyFloat_AS_DOUBLE(self->x2);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -2489,10 +2485,10 @@ Xnoise_generate_iia(Xnoise *self) {
 static void
 Xnoise_generate_aia(Xnoise *self) {
     int i;
-    float inc;
-    float *x1 = Stream_getData((Stream *)self->x1_stream);
+    MYFLT inc;
+    MYFLT *x1 = Stream_getData((Stream *)self->x1_stream);
     self->xx2 = PyFloat_AS_DOUBLE(self->x2);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -2511,10 +2507,10 @@ Xnoise_generate_aia(Xnoise *self) {
 static void
 Xnoise_generate_iaa(Xnoise *self) {
     int i;
-    float inc;
+    MYFLT inc;
     self->xx1 = PyFloat_AS_DOUBLE(self->x1);
-    float *x2 = Stream_getData((Stream *)self->x2_stream);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT *x2 = Stream_getData((Stream *)self->x2_stream);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -2533,10 +2529,10 @@ Xnoise_generate_iaa(Xnoise *self) {
 static void
 Xnoise_generate_aaa(Xnoise *self) {
     int i;
-    float inc;
-    float *x1 = Stream_getData((Stream *)self->x1_stream);
-    float *x2 = Stream_getData((Stream *)self->x2_stream);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT inc;
+    MYFLT *x1 = Stream_getData((Stream *)self->x1_stream);
+    MYFLT *x2 = Stream_getData((Stream *)self->x2_stream);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -2792,9 +2788,7 @@ Xnoise_init(Xnoise *self, PyObject *args, PyObject *kwds)
     Xnoise_setRandomType(self);
     
     (*self->mode_func_ptr)(self);
-    
-    Xnoise_compute_next_data_frame((Xnoise *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -2806,7 +2800,7 @@ static PyObject * Xnoise_setAdd(Xnoise *self, PyObject *arg) { SET_ADD };
 static PyObject * Xnoise_setSub(Xnoise *self, PyObject *arg) { SET_SUB };	
 static PyObject * Xnoise_setDiv(Xnoise *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * Xnoise_play(Xnoise *self) { PLAY };
+static PyObject * Xnoise_play(Xnoise *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * Xnoise_out(Xnoise *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * Xnoise_stop(Xnoise *self) { STOP };
 
@@ -2955,7 +2949,7 @@ static PyMethodDef Xnoise_methods[] = {
     {"getServer", (PyCFunction)Xnoise_getServer, METH_NOARGS, "Returns server object."},
     {"_getStream", (PyCFunction)Xnoise_getStream, METH_NOARGS, "Returns stream object."},
     {"deleteStream", (PyCFunction)Xnoise_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-    {"play", (PyCFunction)Xnoise_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+    {"play", (PyCFunction)Xnoise_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
     {"out", (PyCFunction)Xnoise_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
     {"stop", (PyCFunction)Xnoise_stop, METH_NOARGS, "Stops computing."},
     {"setType", (PyCFunction)Xnoise_setType, METH_O, "Sets distribution type."},
@@ -3064,21 +3058,21 @@ typedef struct {
     Stream *x1_stream;
     Stream *x2_stream;
     Stream *freq_stream;
-    float (*type_func_ptr)();
+    MYFLT (*type_func_ptr)();
     int scale; // 0 = Midi, 1 = frequency, 2 = transpo
-    float xx1;
-    float xx2;
+    MYFLT xx1;
+    MYFLT xx2;
     int range_min;
     int range_max;
     int centralkey;
     int type;
-    float value;
-    float time;
-    float lastPoissonX1;
+    MYFLT value;
+    MYFLT time;
+    MYFLT lastPoissonX1;
     int poisson_tab;
-    float poisson_buffer[2000];
-    float walkerValue;
-    float loop_buffer[15];
+    MYFLT poisson_buffer[2000];
+    MYFLT walkerValue;
+    MYFLT loop_buffer[15];
     int loopChoice;
     int loopCountPlay;
     int loopTime;
@@ -3088,10 +3082,10 @@ typedef struct {
     int modebuffer[5]; // need at least 2 slots for mul & add 
 } XnoiseMidi;
 
-static float
+static MYFLT
 XnoiseMidi_convert(XnoiseMidi *self) {
     int midival;
-    float val;
+    MYFLT val;
 
     midival = (int)((self->value * (self->range_max-self->range_min)) + self->range_min);
     
@@ -3101,11 +3095,11 @@ XnoiseMidi_convert(XnoiseMidi *self) {
         midival = 127;
     
     if (self->scale == 0)
-        val = (float)midival;
+        val = (MYFLT)midival;
     else if (self->scale == 1)
-        val = 8.175798 * powf(1.0594633, midival);
+        val = 8.1757989156437 * MYPOW(1.0594630943593, midival);
     else if (self->scale == 2)
-        val = powf(1.0594633, midival - self->centralkey);
+        val = MYPOW(1.0594630943593, midival - self->centralkey);
     else
         val = midival;
     
@@ -3113,59 +3107,59 @@ XnoiseMidi_convert(XnoiseMidi *self) {
 }
 
 // no parameter
-static float
+static MYFLT
 XnoiseMidi_uniform(XnoiseMidi *self) {
     return RANDOM_UNIFORM;    
 }
 
-static float
+static MYFLT
 XnoiseMidi_linear_min(XnoiseMidi *self) {
-    float a = RANDOM_UNIFORM;    
-    float b = RANDOM_UNIFORM;
+    MYFLT a = RANDOM_UNIFORM;    
+    MYFLT b = RANDOM_UNIFORM;
     if (a < b) return a;
     else return b;
 }
 
-static float
+static MYFLT
 XnoiseMidi_linear_max(XnoiseMidi *self) {
-    float a = RANDOM_UNIFORM;    
-    float b = RANDOM_UNIFORM;
+    MYFLT a = RANDOM_UNIFORM;    
+    MYFLT b = RANDOM_UNIFORM;
     if (a > b) return a;
     else return b;
 }
 
-static float
+static MYFLT
 XnoiseMidi_triangle(XnoiseMidi *self) {
-    float a = RANDOM_UNIFORM;    
-    float b = RANDOM_UNIFORM;
+    MYFLT a = RANDOM_UNIFORM;    
+    MYFLT b = RANDOM_UNIFORM;
     return ((a + b) * 0.5);
 }
 
 // x1 = slope
-static float
+static MYFLT
 XnoiseMidi_expon_min(XnoiseMidi *self) {
     if (self->xx1 <= 0.0) self->xx1 = 0.00001;
-    float val = -logf(RANDOM_UNIFORM) / self->xx1;    
+    MYFLT val = -MYLOG(RANDOM_UNIFORM) / self->xx1;    
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
     else return val;
 }
 
-static float
+static MYFLT
 XnoiseMidi_expon_max(XnoiseMidi *self) {
     if (self->xx1 <= 0.0) self->xx1 = 0.00001;
-    float val = 1.0 - (-logf(RANDOM_UNIFORM) / self->xx1);    
+    MYFLT val = 1.0 - (-MYLOG(RANDOM_UNIFORM) / self->xx1);    
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
     else return val;
 }
 
 // x1 = bandwidth
-static float
+static MYFLT
 XnoiseMidi_biexpon(XnoiseMidi *self) {
-    float polar, val;
+    MYFLT polar, val;
     if (self->xx1 <= 0.0) self->xx1 = 0.00001;
-    float sum = RANDOM_UNIFORM * 2.0;
+    MYFLT sum = RANDOM_UNIFORM * 2.0;
     
     if (sum > 1.0) {
         polar = -1;
@@ -3174,16 +3168,16 @@ XnoiseMidi_biexpon(XnoiseMidi *self) {
     else
         polar = 1;
     
-    val = 0.5 * (polar * logf(sum) / self->xx1) + 0.5;
+    val = 0.5 * (polar * MYLOG(sum) / self->xx1) + 0.5;
     
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
     else return val;
 }
 
-static float
+static MYFLT
 XnoiseMidi_cauchy(XnoiseMidi *self) {
-    float rnd, val, dir;
+    MYFLT rnd, val, dir;
     do {
         rnd = RANDOM_UNIFORM;
     }
@@ -3194,7 +3188,7 @@ XnoiseMidi_cauchy(XnoiseMidi *self) {
     else
         dir = 1;
     
-    val = 0.5 * (tanf(rnd) * self->xx1 * dir) + 0.5;
+    val = 0.5 * (MYTAN(rnd) * self->xx1 * dir) + 0.5;
     
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
@@ -3202,13 +3196,13 @@ XnoiseMidi_cauchy(XnoiseMidi *self) {
 }
 
 // x1 = locator, x2 = shape
-static float
+static MYFLT
 XnoiseMidi_weibull(XnoiseMidi *self) {
-    float rnd, val;
+    MYFLT rnd, val;
     if (self->xx2 <= 0.0) self->xx2 = 0.00001;
     
     rnd = 1.0 / (1.0 - RANDOM_UNIFORM);
-    val = self->xx1 * powf(logf(rnd), (1.0 / self->xx2));
+    val = self->xx1 * MYPOW(MYLOG(rnd), (1.0 / self->xx2));
     
     if (val < 0.0) return 0.0;
     else if (val > 1.0) return 1.0;
@@ -3216,9 +3210,9 @@ XnoiseMidi_weibull(XnoiseMidi *self) {
 }
 
 // x1 = locator, x2 = bandwidth
-static float
+static MYFLT
 XnoiseMidi_gaussian(XnoiseMidi *self) {
-    float rnd, val;
+    MYFLT rnd, val;
     
     rnd = (RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM + RANDOM_UNIFORM);
     val = (self->xx2 * (rnd - 3.0) * 0.33 + self->xx1);
@@ -3229,11 +3223,11 @@ XnoiseMidi_gaussian(XnoiseMidi *self) {
 }
 
 // x1 = gravity center, x2 = compress/expand
-static float
+static MYFLT
 XnoiseMidi_poisson(XnoiseMidi *self) {
     int i, j, factorial;
     long tot;
-    float val;
+    MYFLT val;
     if (self->xx1 < 0.1) self->xx1 = 0.1;
     if (self->xx2 < 0.1) self->xx2 = 0.1;
     
@@ -3243,7 +3237,7 @@ XnoiseMidi_poisson(XnoiseMidi *self) {
         factorial = 1;
         for (i=1; i<12; i++) {
             factorial *= i;
-            tot = (long)(1000.0 * (powf(2.7182818, -self->xx1) * powf(self->xx1, i) / factorial));
+            tot = (long)(1000.0 * (MYPOW(2.7182818, -self->xx1) * MYPOW(self->xx1, i) / factorial));
             for (j=0; j<tot; j++) {
                 self->poisson_buffer[self->poisson_tab] = i;
                 self->poisson_tab++;
@@ -3258,7 +3252,7 @@ XnoiseMidi_poisson(XnoiseMidi *self) {
 }
 
 // x1 = max value, x2 = max step
-static float
+static MYFLT
 XnoiseMidi_walker(XnoiseMidi *self) {
     int modulo, dir;
     
@@ -3281,7 +3275,7 @@ XnoiseMidi_walker(XnoiseMidi *self) {
 }
 
 // x1 = max value, x2 = max step
-static float
+static MYFLT
 XnoiseMidi_loopseg(XnoiseMidi *self) {
     int modulo, dir;
     
@@ -3337,10 +3331,10 @@ XnoiseMidi_loopseg(XnoiseMidi *self) {
 static void
 XnoiseMidi_generate_iii(XnoiseMidi *self) {
     int i;
-    float inc;
+    MYFLT inc;
     self->xx1 = PyFloat_AS_DOUBLE(self->x1);
     self->xx2 = PyFloat_AS_DOUBLE(self->x2);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -3359,10 +3353,10 @@ XnoiseMidi_generate_iii(XnoiseMidi *self) {
 static void
 XnoiseMidi_generate_aii(XnoiseMidi *self) {
     int i;
-    float inc;
-    float *x1 = Stream_getData((Stream *)self->x1_stream);
+    MYFLT inc;
+    MYFLT *x1 = Stream_getData((Stream *)self->x1_stream);
     self->xx2 = PyFloat_AS_DOUBLE(self->x2);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -3382,10 +3376,10 @@ XnoiseMidi_generate_aii(XnoiseMidi *self) {
 static void
 XnoiseMidi_generate_iai(XnoiseMidi *self) {
     int i;
-    float inc;
+    MYFLT inc;
     self->xx1 = PyFloat_AS_DOUBLE(self->x1);
-    float *x2 = Stream_getData((Stream *)self->x2_stream);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT *x2 = Stream_getData((Stream *)self->x2_stream);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -3405,10 +3399,10 @@ XnoiseMidi_generate_iai(XnoiseMidi *self) {
 static void
 XnoiseMidi_generate_aai(XnoiseMidi *self) {
     int i;
-    float inc;
-    float *x1 = Stream_getData((Stream *)self->x1_stream);
-    float *x2 = Stream_getData((Stream *)self->x2_stream);
-    float fr = PyFloat_AS_DOUBLE(self->freq);
+    MYFLT inc;
+    MYFLT *x1 = Stream_getData((Stream *)self->x1_stream);
+    MYFLT *x2 = Stream_getData((Stream *)self->x2_stream);
+    MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
     inc = fr / self->sr;
     
     for (i=0; i<self->bufsize; i++) {
@@ -3429,10 +3423,10 @@ XnoiseMidi_generate_aai(XnoiseMidi *self) {
 static void
 XnoiseMidi_generate_iia(XnoiseMidi *self) {
     int i;
-    float inc;
+    MYFLT inc;
     self->xx1 = PyFloat_AS_DOUBLE(self->x1);
     self->xx2 = PyFloat_AS_DOUBLE(self->x2);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -3451,10 +3445,10 @@ XnoiseMidi_generate_iia(XnoiseMidi *self) {
 static void
 XnoiseMidi_generate_aia(XnoiseMidi *self) {
     int i;
-    float inc;
-    float *x1 = Stream_getData((Stream *)self->x1_stream);
+    MYFLT inc;
+    MYFLT *x1 = Stream_getData((Stream *)self->x1_stream);
     self->xx2 = PyFloat_AS_DOUBLE(self->x2);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -3474,10 +3468,10 @@ XnoiseMidi_generate_aia(XnoiseMidi *self) {
 static void
 XnoiseMidi_generate_iaa(XnoiseMidi *self) {
     int i;
-    float inc;
+    MYFLT inc;
     self->xx1 = PyFloat_AS_DOUBLE(self->x1);
-    float *x2 = Stream_getData((Stream *)self->x2_stream);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT *x2 = Stream_getData((Stream *)self->x2_stream);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -3497,10 +3491,10 @@ XnoiseMidi_generate_iaa(XnoiseMidi *self) {
 static void
 XnoiseMidi_generate_aaa(XnoiseMidi *self) {
     int i;
-    float inc;
-    float *x1 = Stream_getData((Stream *)self->x1_stream);
-    float *x2 = Stream_getData((Stream *)self->x2_stream);
-    float *fr = Stream_getData((Stream *)self->freq_stream);
+    MYFLT inc;
+    MYFLT *x1 = Stream_getData((Stream *)self->x1_stream);
+    MYFLT *x2 = Stream_getData((Stream *)self->x2_stream);
+    MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
     
     for (i=0; i<self->bufsize; i++) {
         inc = fr[i] / self->sr;
@@ -3765,9 +3759,7 @@ XnoiseMidi_init(XnoiseMidi *self, PyObject *args, PyObject *kwds)
     XnoiseMidi_setRandomType(self);
     
     (*self->mode_func_ptr)(self);
-    
-    XnoiseMidi_compute_next_data_frame((XnoiseMidi *)self);
-    
+        
     Py_INCREF(self);
     return 0;
 }
@@ -3779,7 +3771,7 @@ static PyObject * XnoiseMidi_setAdd(XnoiseMidi *self, PyObject *arg) { SET_ADD }
 static PyObject * XnoiseMidi_setSub(XnoiseMidi *self, PyObject *arg) { SET_SUB };	
 static PyObject * XnoiseMidi_setDiv(XnoiseMidi *self, PyObject *arg) { SET_DIV };	
 
-static PyObject * XnoiseMidi_play(XnoiseMidi *self) { PLAY };
+static PyObject * XnoiseMidi_play(XnoiseMidi *self, PyObject *args, PyObject *kwds) { PLAY };
 static PyObject * XnoiseMidi_out(XnoiseMidi *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * XnoiseMidi_stop(XnoiseMidi *self) { STOP };
 
@@ -3971,7 +3963,7 @@ static PyMethodDef XnoiseMidi_methods[] = {
     {"getServer", (PyCFunction)XnoiseMidi_getServer, METH_NOARGS, "Returns server object."},
     {"_getStream", (PyCFunction)XnoiseMidi_getStream, METH_NOARGS, "Returns stream object."},
     {"deleteStream", (PyCFunction)XnoiseMidi_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
-    {"play", (PyCFunction)XnoiseMidi_play, METH_NOARGS, "Starts computing without sending sound to soundcard."},
+    {"play", (PyCFunction)XnoiseMidi_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
     {"out", (PyCFunction)XnoiseMidi_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
     {"stop", (PyCFunction)XnoiseMidi_stop, METH_NOARGS, "Stops computing."},
     {"setType", (PyCFunction)XnoiseMidi_setType, METH_O, "Sets distribution type."},

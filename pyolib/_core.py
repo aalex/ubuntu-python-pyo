@@ -23,7 +23,16 @@ import random, os, sys, inspect, tempfile
 from subprocess import call
 from distutils.sysconfig import get_python_lib
 
-from _pyo import *
+PYO_VERSION = '0.4.1'
+
+import __builtin__
+if hasattr(__builtin__, 'pyo_use_double'):
+    from _pyo64 import *
+    print "pyo version %s (uses double precision)" % PYO_VERSION
+else:    
+    from _pyo import *
+    print "pyo version %s (uses single precision)" % PYO_VERSION
+    
 from _maps import *
 from _widgets import createCtrlWindow, createViewTableWindow, createViewMatrixWindow
 
@@ -63,13 +72,13 @@ def wrap(arg, i):
     """
     Return value at position `i` from `arg` with wrap around `arg` length.
     
-    """
+    """    
     x = arg[i % len(arg)]
     if isinstance(x, PyoObject):
         return x[0]
-    elif isinstance(i, PyoTableObject):
+    elif isinstance(x, PyoTableObject):
         return x[0]
-    elif isinstance(i, PyoMatrixObject):
+    elif isinstance(x, PyoMatrixObject):
         return x[0]
     else:
         return x
@@ -92,7 +101,10 @@ if sys.version_info[:2] <= (2, 5):
         doc = cls.__doc__.split("Examples:")[1]
         lines = doc.splitlines()
         ex_lines = [line.lstrip("    ") for line in lines if ">>>" in line or "..." in line]
-        ex = "import time\nfrom pyo import *\n"
+        if hasattr(__builtin__, 'pyo_use_double'):
+            ex = "import time\nfrom pyo64 import *\n"
+        else:
+            ex = "import time\nfrom pyo import *\n"
         for line in ex_lines:
             if ">>>" in line: line = line.lstrip(">>> ")
             if "..." in line: line = "    " +  line.lstrip("... ")
@@ -121,7 +133,10 @@ else:
         doc = cls.__doc__.split("Examples:")[1]
         lines = doc.splitlines()
         ex_lines = [line.lstrip("    ") for line in lines if ">>>" in line or "..." in line]
-        ex = "import time\nfrom pyo import *\n"
+        if hasattr(__builtin__, 'pyo_use_double'):
+            ex = "import time\nfrom pyo64 import *\n"
+        else:
+            ex = "import time\nfrom pyo import *\n"
         for line in ex_lines:
             if ">>>" in line: line = line.lstrip(">>> ")
             if "..." in line: line = "    " +  line.lstrip("... ")
@@ -161,7 +176,22 @@ def class_args(cls):
     arg = inspect.formatargspec(arg, varargs, varkw, defaults, formatvalue=removeExtraDecimals)
     arg = arg.replace("self, ", "")
     return name + arg
-        
+
+def getVersion():
+    """
+    Returns the version number of the current pyo installation.
+
+    This function returns the version number of the current pyo
+    installation as a 3-ints tuple (major, minor, rev). 
+
+    The returned tuple for version '0.4.1' will look like :
+    
+    (0, 4, 1)
+
+    """
+    major, minor, rev = PYO_VERSION.split('.')
+    return (int(major), int(minor), int(rev))
+
 ######################################################################
 ### PyoObject -> base class for pyo sound objects
 ######################################################################
@@ -173,11 +203,11 @@ class PyoObject(object):
 
     Methods:
 
-    play() : Start processing without sending samples to output. 
+    play(dur, delay) : Start processing without sending samples to output. 
         This method is called automatically at the object creation.
     stop() : Stop processing.
-    out(chnl, inc) : Start processing and send samples to audio output 
-        beginning at `chnl`.
+    out(chnl, inc, dur, delay) : Start processing and send samples to audio 
+        output beginning at `chnl`.
     mix(voices) : Mix object's audio streams into `voices` streams and 
         return the Mix object.
     setMul(x) : Replace the `mul` attribute.
@@ -223,17 +253,30 @@ class PyoObject(object):
         self._target_dict = {}
         self._signal_dict = {}
         self._keep_trace = []
+        self._mul = 1.0
+        self._add = 0.0
+        self._add_dummy = None
+        self._mul_dummy = None
 
     def __add__(self, x):
         self._keep_trace.append(x)
         x, lmax = convertArgsToLists(x)
-        self._add_dummy = Dummy([obj + wrap(x,i) for i, obj in enumerate(self._base_objs)])
+        if self.__len__() >= lmax:
+            self._add_dummy = Dummy([obj + wrap(x,i) for i, obj in enumerate(self._base_objs)])
+        else:
+            if isinstance(x, PyoObject):
+                self._add_dummy = x + self 
+            else:
+                self._add_dummy = Dummy([wrap(self._base_objs,i) + obj for i, obj in enumerate(x)])  
         return self._add_dummy
         
     def __radd__(self, x):
         self._keep_trace.append(x)
         x, lmax = convertArgsToLists(x)
-        self._add_dummy = Dummy([obj + wrap(x,i) for i, obj in enumerate(self._base_objs)])
+        if self.__len__() >= lmax:
+            self._add_dummy = Dummy([obj + wrap(x,i) for i, obj in enumerate(self._base_objs)])
+        else:
+            self._add_dummy = Dummy([wrap(self._base_objs,i) + obj for i, obj in enumerate(x)])                
         return self._add_dummy
             
     def __iadd__(self, x):
@@ -243,13 +286,24 @@ class PyoObject(object):
     def __sub__(self, x):
         self._keep_trace.append(x)
         x, lmax = convertArgsToLists(x)
-        self._add_dummy = Dummy([obj - wrap(x,i) for i, obj in enumerate(self._base_objs)])
+        if self.__len__() >= lmax:
+            self._add_dummy = Dummy([obj - wrap(x,i) for i, obj in enumerate(self._base_objs)])
+        else:
+            if isinstance(x, PyoObject):
+                print 'Substraction Warning: %s - %s' % (self.__repr__(), x.__repr__()),
+                print 'Right operator trunctaded to match left operator number of streams.'
+                self._add_dummy = Dummy([obj - wrap(x,i) for i, obj in enumerate(self._base_objs)])
+            else:
+                self._add_dummy = Dummy([wrap(self._base_objs,i) - obj for i, obj in enumerate(x)])
         return self._add_dummy
 
     def __rsub__(self, x):
         self._keep_trace.append(x)
         x, lmax = convertArgsToLists(x)
-        self._add_dummy = Dummy([Sig(wrap(x,i)) - obj for i, obj in enumerate(self._base_objs)])
+        if self.__len__() >= lmax:
+            self._add_dummy = Dummy([Sig(wrap(x,i)) - obj for i, obj in enumerate(self._base_objs)])
+        else:
+            self._add_dummy = Dummy([Sig(obj) - wrap(self._base_objs,i) for i, obj in enumerate(x)])
         return self._add_dummy
 
     def __isub__(self, x):
@@ -259,13 +313,22 @@ class PyoObject(object):
     def __mul__(self, x):
         self._keep_trace.append(x)
         x, lmax = convertArgsToLists(x)
-        self._mul_dummy = Dummy([obj * wrap(x,i) for i, obj in enumerate(self._base_objs)])
+        if self.__len__() >= lmax:
+            self._mul_dummy = Dummy([obj * wrap(x,i) for i, obj in enumerate(self._base_objs)])
+        else:
+            if isinstance(x, PyoObject):
+                self._mul_dummy = x * self 
+            else:
+                self._mul_dummy = Dummy([wrap(self._base_objs,i) * obj for i, obj in enumerate(x)])  
         return self._mul_dummy
         
     def __rmul__(self, x):
         self._keep_trace.append(x)
         x, lmax = convertArgsToLists(x)
-        self._mul_dummy = Dummy([obj * wrap(x,i) for i, obj in enumerate(self._base_objs)])
+        if self.__len__() >= lmax:
+            self._mul_dummy = Dummy([obj * wrap(x,i) for i, obj in enumerate(self._base_objs)])
+        else:
+            self._mul_dummy = Dummy([wrap(self._base_objs,i) * obj for i, obj in enumerate(x)])                
         return self._mul_dummy
             
     def __imul__(self, x):
@@ -275,13 +338,24 @@ class PyoObject(object):
     def __div__(self, x):
         self._keep_trace.append(x)
         x, lmax = convertArgsToLists(x)
-        self._mul_dummy = Dummy([obj / wrap(x,i) for i, obj in enumerate(self._base_objs)])
+        if self.__len__() >= lmax:
+            self._mul_dummy = Dummy([obj / wrap(x,i) for i, obj in enumerate(self._base_objs)])
+        else:
+            if isinstance(x, PyoObject):
+                print 'Division Warning: %s / %s' % (self.__repr__(), x.__repr__()),
+                print 'Right operator trunctaded to match left operator number of streams.'
+                self._mul_dummy = Dummy([obj / wrap(x,i) for i, obj in enumerate(self._base_objs)])
+            else:
+                self._mul_dummy = Dummy([wrap(self._base_objs,i) / obj for i, obj in enumerate(x)])
         return self._mul_dummy
 
     def __rdiv__(self, x):
         self._keep_trace.append(x)
         x, lmax = convertArgsToLists(x)
-        self._mul_dummy = Dummy([Sig(wrap(x,i)) / obj for i, obj in enumerate(self._base_objs)])
+        if self.__len__() >= lmax:
+            self._mul_dummy = Dummy([Sig(wrap(x,i)) / obj for i, obj in enumerate(self._base_objs)])
+        else:
+            self._mul_dummy = Dummy([Sig(obj) / wrap(self._base_objs,i) for i, obj in enumerate(x)])
         return self._mul_dummy
 
     def __idiv__(self, x):
@@ -301,7 +375,35 @@ class PyoObject(object):
         for obj in self._base_objs:
             obj.deleteStream()
             del obj
-            
+
+        if hasattr(self, "_input"):
+            if type(self._input) == ListType:
+                for pyoObj in self._input:
+                    if hasattr(pyoObj, "getBaseObjects"):
+                        for obj in pyoObj.getBaseObjects():
+                            obj.deleteStream()
+                            del obj
+            else:
+                if hasattr(self._input, "getBaseObjects"):
+                    for obj in self._input.getBaseObjects():
+                        obj.deleteStream()
+                        del obj
+            del self._input
+
+        for key in self.__dict__.keys():
+            if isinstance(self.__dict__[key], PyoObject):
+                del self.__dict__[key]
+            elif type(self.__dict__[key]) == ListType:
+                for ele in self.__dict__[key]:
+                    try:
+                        ele.deleteStreams()
+                        del ele
+                    except:
+                        del ele
+
+        if hasattr(self, "_in_fader"):
+            del self._in_fader
+
     def __repr__(self):
         return '< Instance of %s class >' % self.__class__.__name__
         
@@ -352,16 +454,25 @@ class PyoObject(object):
         """
         return self._base_objs
         
-    def play(self):
+    def play(self, dur=0, delay=0):
         """
         Start processing without sending samples to output. 
         This method is called automatically at the object creation.
         
+        Parameters:
+        
+        dur : float, optional
+            Duration, in seconds, of the object's activation. The default is 0
+            and means infinite duration.
+        delay : float, optional
+            Delay, in seconds, before the object's activation. Defaults to 0.
+        
         """
-        self._base_objs = [obj.play() for obj in self._base_objs]
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         return self
 
-    def out(self, chnl=0, inc=1):
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
         """
         Start processing and send samples to audio output beginning at `chnl`.
         
@@ -381,18 +492,23 @@ class PyoObject(object):
             
             If `chnl` is a list: successive values in the list will be 
             assigned to successive streams.
-            
         inc : int, optional
             Output increment value.
+        dur : float, optional
+            Duration, in seconds, of the object's activation. The default is 0
+            and means infinite duration.
+        delay : float, optional
+            Delay, in seconds, before the object's activation. Defaults to 0.
         
         """
+        dur, delay, lmax = convertArgsToLists(dur, delay)
         if type(chnl) == ListType:
-            self._base_objs = [obj.out(wrap(chnl,i)) for i, obj in enumerate(self._base_objs)]
+            self._base_objs = [obj.out(wrap(chnl,i), wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         else:
             if chnl < 0:    
-                self._base_objs = [obj.out(i*inc) for i, obj in enumerate(random.sample(self._base_objs, len(self._base_objs)))]
+                self._base_objs = [obj.out(i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(random.sample(self._base_objs, len(self._base_objs)))]
             else:
-                self._base_objs = [obj.out(chnl+i*inc) for i, obj in enumerate(self._base_objs)]
+                self._base_objs = [obj.out(chnl+i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         return self
     
     def stop(self):
@@ -416,8 +532,8 @@ class PyoObject(object):
             Mix object's streams. Defaults to 1.
             
         """
-        self._mix = Mix(self, voices)
-        return self._mix
+        return Mix(self, voices)
+        #return self._mix
         
     def setMul(self, x):
         """
@@ -502,7 +618,7 @@ class PyoObject(object):
         self._signal_dict[attr].stop()
         del self._signal_dict[attr]
         
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         """
         Opens a sliders window to control the parameters of the object. 
         Only parameters that can be set to a PyoObject are allowed 
@@ -519,6 +635,11 @@ class PyoObject(object):
         title : string, optional
             Title of the window. If none is provided, the name of the 
             class is used.
+        wxnoserver : boolean, optional
+            With wxPython graphical toolkit, if True, tells the 
+            interpreter that there will be no server window and not 
+            to wait for it before showing the controller window. 
+            Defaults to False.
 
         """
         if map_list == None:
@@ -527,7 +648,7 @@ class PyoObject(object):
             print("There is no controls for %s object." % self.__class__.__name__)
             return
     
-        createCtrlWindow(self, map_list, title)
+        createCtrlWindow(self, map_list, title, wxnoserver)
 
     @property
     def mul(self):
@@ -560,7 +681,7 @@ class PyoTableObject(object):
     view() : Opens a window showing the contents of the table.
     dump() : Print current status of the object's attributes.
     save(path, format) : Writes the content of the table in an audio file.
-    write(path) : Writes the content of the table in a text file.
+    write(path, oneline) : Writes the content of the table in a text file.
     read(path) : Sets the content of the table from a text file.
     normalize() : Normalize table samples between -1 and 1.
     put(value, pos) : Puts a value at specified position in the table.
@@ -637,16 +758,37 @@ class PyoTableObject(object):
             samples = [obj.getTable() for i, obj in enumerate(self._base_objs)]
         savefile(samples, path, sr, len(self._base_objs), format)    
     
-    def write(self, path):
+    def write(self, path, oneline=True):
         """
         Writes the content of the table in a text file.
         
         This function can be used to store the table data as a
         list of floats into a text file.
-         
+        
+        Parameters:
+        
+        path : string
+            Full path of the generated file.
+        oneline : boolean, optional
+            If True, list of samples will inserted on one line.
+            If False, list of samples will be truncated to 8 floats
+            per line. Defaults to True.
+
         """
         f = open(path, "w")
-        f.write(str([obj.getTable() for obj in self._base_objs]))
+        if oneline:
+            f.write(str([obj.getTable() for obj in self._base_objs]))
+        else:
+            text = "["
+            for obj in self._base_objs:
+                text += "["
+                for i, val in enumerate(obj.getTable()):
+                    if (i % 8) == 0:
+                        text += "\n"
+                    text += str(val) + ", "
+                text += "]"
+            text += "]"
+            f.write(text)
         f.close()
 
     def read(self, path):
@@ -727,13 +869,23 @@ class PyoTableObject(object):
         [obj.normalize() for obj in self._base_objs]
         return self
 
-    def view(self):
+    def view(self, title="Table waveform", wxnoserver=False):
         """
         Opens a window showing the contents of the table.
         
+        Parameters:
+        
+        title : string, optional
+            Window title. Defaults to "Table waveform". 
+        wxnoserver : boolean, optional
+            With wxPython graphical toolkit, if True, tells the 
+            interpreter that there will be no server window and not 
+            to wait for it before showing the table window. 
+            Defaults to False.
+        
         """
         samples = self._base_objs[0].getViewTable()
-        createViewTableWindow(samples)
+        createViewTableWindow(samples, title, wxnoserver, self.__class__.__name__)
         
 ######################################################################
 ### PyoMatrixObject -> base class for pyo matrix objects
@@ -757,8 +909,8 @@ class PyoMatrixObject(object):
     normalize() : Normalize matrix samples between -1 and 1.
     blur() : Apply a simple gaussian blur on the matrix.
     boost(min, max, boost) : Boost the contrast of values in the matrix.
-    put(value, row, col) : Puts a value at specified position in the matrix.
-    get(row, col) : Returns the value at specified position in the matrix.
+    put(value, x, y) : Puts a value at specified position in the matrix.
+    get(x, y) : Returns the value at specified position in the matrix.
     
     Notes:
     
@@ -879,7 +1031,7 @@ class PyoMatrixObject(object):
         """
         [obj.boost(min, max, boost) for obj in self._base_objs]
 
-    def put(self, value, row=0, col=0):
+    def put(self, value, x=0, y=0):
         """
         Puts a value at specified position in the matrix.
         
@@ -891,15 +1043,15 @@ class PyoMatrixObject(object):
         
         value : float
             Value, as floating-point, to record in the matrix.
-        row : int, optional
-            Row position where to record value. Defaults to 0.
-        col : int, optional
-            Column position where to record value. Defaults to 0.
+        x : int, optional
+            X position where to record value. Defaults to 0.
+        y : int, optional
+            Y position where to record value. Defaults to 0.
         
         """
-        [obj.put(value, row, col) for obj in self._base_objs]
+        [obj.put(value, x, y) for obj in self._base_objs]
 
-    def get(self, row, col):
+    def get(self, x, y):
         """
         Returns the value, as float, at specified position in the matrix.
         
@@ -909,23 +1061,33 @@ class PyoMatrixObject(object):
         
         Parameters:
         
-        row : int, optional
-            Row position where to get value. Defaults to 0.
-        col : int, optional
-            Column position where to get value. Defaults to 0.
+        x : int, optional
+            X position where to get value. Defaults to 0.
+        y : int, optional
+            Y position where to get value. Defaults to 0.
         
         """
-        values = [obj.get(row, col) for obj in self._base_objs]
+        values = [obj.get(x, y) for obj in self._base_objs]
         if len(values) == 1: return values[0]
         else: return values
 
-    def view(self):
+    def view(self, title="Matrix viewer", wxnoserver=False):
         """
         Opens a window showing the contents of the matrix.
         
+        Parameters:
+        
+        title : string, optional
+            Window title. Defaults to "Matrix viewer". 
+        wxnoserver : boolean, optional
+            With wxPython graphical toolkit, if True, tells the 
+            interpreter that there will be no server window and not 
+            to wait for it before showing the matrix window. 
+            Defaults to False.
+        
         """        
         samples = self._base_objs[0].getViewData()
-        createViewMatrixWindow(samples, self.getSize())
+        createViewMatrixWindow(samples, self.getSize(), title, wxnoserver)
         
 ######################################################################
 ### Internal classes -> Used by pyo
@@ -974,6 +1136,7 @@ class Mix(PyoObject):
         self._input = input
         self._mul = mul
         self._add = add
+        mul, add, lmax = convertArgsToLists(mul, add)
         if type(input) == ListType:
             input_objs = []
             input_objs = [obj for pyoObj in input for obj in pyoObj.getBaseObjects()]
@@ -983,8 +1146,10 @@ class Mix(PyoObject):
         if voices < 1: 
             voices = 1
             num = 1
-        elif voices > input_len: 
+        elif voices > input_len and voices > lmax: 
             num = voices
+        elif lmax > input_len:
+            num = lmax    
         else:
             num = input_len   
         sub_lists = []
@@ -993,11 +1158,27 @@ class Mix(PyoObject):
         for i in range(num):
             obj = input_objs[i % input_len]
             sub_lists[i % voices].append(obj)
-        self._base_objs = [Mix_base(l) for l in sub_lists]
+        self._base_objs = [Mix_base(l, wrap(mul,i), wrap(add,i)) for i, l in enumerate(sub_lists)]
 
     def __dir__(self):
         return ['mul', 'add']
-        
+
+    def __del__(self):
+        for obj in self._base_objs:
+            obj.deleteStream()
+            del obj
+        del self._base_objs
+        if type(self._input) == ListType:
+            for pyoObj in self._input:
+                for obj in pyoObj.getBaseObjects():
+                    obj.deleteStream()
+                    del obj
+        else:
+            for obj in self._input.getBaseObjects():
+                obj.deleteStream()
+                del obj
+        del self._input
+
 class Dummy(PyoObject):
     """
     Dummy object used to perform arithmetics on PyoObject.
@@ -1179,9 +1360,9 @@ class Sig(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setValue(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(0, 1, "lin", "value", self._value)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
     
     @property
     def value(self):
@@ -1192,9 +1373,7 @@ class Sig(PyoObject):
 
 class VarPort(PyoObject):
     """
-    Convert numeric value to PyoObject signal with portamento.    Notes:
-
-    The out() method is bypassed. VarPort's signal can not be sent to audio outs.
+    Convert numeric value to PyoObject signal with portamento.
 
     When `value` attribute is changed, a smoothed ramp is applied from the
     current value to the new value. If a callback is provided at `function`,
@@ -1283,9 +1462,9 @@ class VarPort(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setTime(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def value(self):

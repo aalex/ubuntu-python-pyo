@@ -27,14 +27,16 @@ along with pyo.  If not, see <http://www.gnu.org/licenses/>.
 from _core import *
 from _maps import *
 import aifc
+from types import ListType
 
 class SfPlayer(PyoObject):
     """
     Soundfile player.
     
-    Reads audio data from a file, and can alter its pitch using one of 
-    several available interpolation types, as well as convert the sample 
-    rate to match the Server sampling rate setting.
+    Reads audio data from a file using one of several available interpolation 
+    types. User can alter its pitch with the `speed` attribute. The object
+    takes care of sampling rate conversion to match the Server sampling 
+    rate setting.
     
     Parent class: PyoObject
     
@@ -46,9 +48,9 @@ class SfPlayer(PyoObject):
         Transpose the pitch of input sound by this factor. 1 is the 
         original pitch, lower values play sound slower, and higher 
         values play sound faster. Negative values results in playing 
-        sound backward. At audio rate, fast changes between positive and
-        negative values can result in strong DC components in the output 
-        sound. Defaults to 1.
+        sound backward. Although the `speed` attribute accepts audio
+        rate signal, its value is updated only once per buffer size. 
+        Defaults to 1.
     loop : bool, optional
         If set to True, sound will play in loop. Defaults to False.
     offset : float, optional 
@@ -104,14 +106,15 @@ class SfPlayer(PyoObject):
         self._mul = mul
         self._add = add
         path, speed, loop, offset, interp, mul, add, lmax = convertArgsToLists(path, speed, loop, offset, interp, mul, add)
+        self._base_players = []
         self._base_objs = []
         self._trig_objs = []
-        self._snd_size, self._dur, self._snd_sr, self._snd_chnls = sndinfo(path[0])
-        self._base_players = [SfPlayer_base(wrap(path,i), wrap(speed,i), wrap(loop,i), wrap(offset,i), wrap(interp,i)) for i in range(lmax)]
-        for i in range(lmax * self._snd_chnls):
-            j = i / self._snd_chnls
-            self._base_objs.append(SfPlay_base(wrap(self._base_players,j), i % self._snd_chnls, wrap(mul,j), wrap(add,j)))
-            self._trig_objs.append(SfPlayTrig_base(wrap(self._base_players,j), i % self._snd_chnls))
+        for i in range(lmax):
+            _snd_size, _dur, _snd_sr, _snd_chnls = sndinfo(path[0])
+            self._base_players.append(SfPlayer_base(wrap(path,i), wrap(speed,i), wrap(loop,i), wrap(offset,i), wrap(interp,i)))
+            for j in range(_snd_chnls):
+                self._base_objs.append(SfPlay_base(self._base_players[-1], j, wrap(mul,i), wrap(add,i)))
+                self._trig_objs.append(SfPlayTrig_base(self._base_players[-1], j))
 
     def __dir__(self):
         return ['sound', 'speed', 'loop', 'offset', 'interp', 'mul', 'add']
@@ -134,23 +137,25 @@ class SfPlayer(PyoObject):
             return self._base_objs[i]
         else:
             print "'i' too large!"         
-                        
-    def play(self):
-        self._base_players = [obj.play() for obj in self._base_players]
-        self._base_objs = [obj.play() for obj in self._base_objs]
-        self._trig_objs = [obj.play() for obj in self._trig_objs]
+
+    def play(self, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_players = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_players)]
+        self._base_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
+        self._trig_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._trig_objs)]
         return self
 
-    def out(self, chnl=0, inc=1):
-        self._base_players = [obj.play() for obj in self._base_players]
-        self._trig_objs = [obj.play() for obj in self._trig_objs]
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_players = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_players)]
+        self._trig_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._trig_objs)]
         if type(chnl) == ListType:
-            self._base_objs = [obj.out(wrap(chnl,i)) for i, obj in enumerate(self._base_objs)]
+            self._base_objs = [obj.out(wrap(chnl,i), wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         else:
             if chnl < 0:    
-                self._base_objs = [obj.out(i*inc) for i, obj in enumerate(random.sample(self._base_objs, len(self._base_objs)))]
+                self._base_objs = [obj.out(i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(random.sample(self._base_objs, len(self._base_objs)))]
             else:   
-                self._base_objs = [obj.out(chnl+i*inc) for i, obj in enumerate(self._base_objs)]
+                self._base_objs = [obj.out(chnl+i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         return self
     
     def stop(self):
@@ -163,9 +168,8 @@ class SfPlayer(PyoObject):
         """
         Sets a new sound to read.
         
-        If the number of channels of the new sound doesn't match those 
-        of the sound loaded at initialization time, erratic behaviors 
-        can occur.
+        The number of channels of the new sound must match those 
+        of the sound loaded at initialization time.
         
         Parameters:
         
@@ -173,6 +177,22 @@ class SfPlayer(PyoObject):
             Full path of the new sound.
 
         """
+        if type(self._sound) == ListType:
+            curNchnls = sndinfo(self._sound[0])[3]
+        else:
+            curNchnls = sndinfo(self._sound)[3]
+        if type(path) == ListType:
+            p = path[0]
+        else:
+            p = path
+        try:
+            _snd_size, _dur, _snd_sr, _snd_chnls = sndinfo(p)
+        except:
+            return
+        if _snd_chnls != curNchnls:
+            print "Soundfile must contains exactly %d channels." % curNchnls
+            return
+    
         self._sound = path
         path, lmax = convertArgsToLists(path)
         [obj.setSound(wrap(path,i)) for i, obj in enumerate(self._base_players)]
@@ -235,9 +255,9 @@ class SfPlayer(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setInterp(wrap(x,i)) for i, obj in enumerate(self._base_players)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(-2., 2., 'lin', 'speed', self._speed), SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
           
     @property
     def sound(self): 
@@ -278,26 +298,30 @@ class SfMarkerShuffler(PyoObject):
     """
     AIFF with markers soundfile shuffler.
     
-    Reads audio data from a AIFF file, and can alter its pitch using 
-    one of several available interpolation types, as well as convert 
-    the sample rate to match the Server sampling rate setting. The 
-    reading pointer choose randomly a marker (set in the header of the 
-    file) as its starting point and reads the samples until it reaches 
-    the following marker. Then, it choose another marker and so on...
+    Reads audio data from a AIFF file using one of several available 
+    interpolation types. User can alter its pitch with the `speed` 
+    attribute. The object takes care of sampling rate conversion to 
+    match the Server sampling rate setting. 
+    
+    The reading pointer randomly choose a marker (from the MARK chunk
+    in the header of the AIFF file) as its starting point and reads 
+    the samples until it reaches the following marker. Then, it choose 
+    another marker and reads from the new position and so on...
     
     Parent class: PyoObject
     
     Parameters:
     
     path : string
-        Full path name of the sound to read.
+        Full path name of the sound to read. Can't e changed after
+        initialization.
     speed : float or PyoObject, optional
         Transpose the pitch of input sound by this factor. 1 is the 
         original pitch, lower values play sound slower, and higher 
         values play sound faster. Negative values results in playing 
-        sound backward. At audio rate, fast changes between positive and
-        negative values can result in strong DC components in the output 
-        sound. Defaults to 1.
+        sound backward. Although the `speed` attribute accepts audio
+        rate signal, its value is updated only once per buffer size. 
+        Defaults to 1.
     interp : int, optional
         Choice of the interpolation method. Defaults to 2.
             1 : no interpolation
@@ -316,11 +340,6 @@ class SfMarkerShuffler(PyoObject):
     speed : float or PyoObject, Transposition factor.
     interp : int {1, 2, 3, 4}, Interpolation method.
  
-    Notes:
-    
-    Reading backward with fast changes at audio rate can generates strong 
-    DC in the resulting sound.
-    
     Examples:
     
     >>> s = Server().boot()
@@ -362,20 +381,22 @@ class SfMarkerShuffler(PyoObject):
             obj.deleteStream()
             del obj
                         
-    def play(self):
-        self._base_players = [obj.play() for obj in self._base_players]
-        self._base_objs = [obj.play() for obj in self._base_objs]
+    def play(self, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_players = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_players)]
+        self._base_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         return self
 
-    def out(self, chnl=0, inc=1):
-        self._base_players = [obj.play() for obj in self._base_players]
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_players = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_players)]
         if type(chnl) == ListType:
-            self._base_objs = [obj.out(wrap(chnl,i)) for i, obj in enumerate(self._base_objs)]
+            self._base_objs = [obj.out(wrap(chnl,i), wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         else:
             if chnl < 0:    
-                self._base_objs = [obj.out(i*inc) for i, obj in enumerate(random.sample(self._base_objs, len(self._base_objs)))]
+                self._base_objs = [obj.out(i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(random.sample(self._base_objs, len(self._base_objs)))]
             else:   
-                self._base_objs = [obj.out(chnl+i*inc) for i, obj in enumerate(self._base_objs)]
+                self._base_objs = [obj.out(chnl+i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         return self
     
     def stop(self):
@@ -418,9 +439,9 @@ class SfMarkerShuffler(PyoObject):
         """
         return self._markers
         
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(0.01, 2., 'lin', 'speed', self._speed), SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
                     
     @property
     def speed(self): 
@@ -440,11 +461,14 @@ class SfMarkerLooper(PyoObject):
     """
     AIFF with markers soundfile looper.
 
-    Reads audio data from a AIFF file, and can alter its pitch using 
-    one of several available interpolation types, as well as convert 
-    the sample rate to match the Server sampling rate setting. The 
-    reading pointer loops a specific marker (set in the header of the 
-    file) until it received a new integer in the `mark` parameter.
+    Reads audio data from a AIFF file using one of several available 
+    interpolation types. User can alter its pitch with the `speed`
+    attribute. The object takes care of sampling rate conversion to 
+    match the Server sampling rate setting. 
+    
+    The reading pointer loops a specific marker (from the MARK chunk
+    in the header of the AIFF file) until it received a new integer 
+    in the `mark` attribute.
 
     Parent class: PyoObject
 
@@ -456,12 +480,12 @@ class SfMarkerLooper(PyoObject):
         Transpose the pitch of input sound by this factor. 1 is the 
         original pitch, lower values play sound slower, and higher 
         values play sound faster. Negative values results in playing 
-        sound backward. At audio rate, fast changes between positive and
-        negative values can result in strong DC components in the output 
-        sound. Defaults to 1.
+        sound backward. Although the `speed` attribute accepts audio
+        rate signal, its value is updated only once per buffer size. 
+        Defaults to 1.
     mark : float or PyoObject, optional
-        Integer denoting the marker to loop, in the range 0 -> len(getMarkers()).
-        Defaults to 0.
+        Integer denoting the marker to loop, in the range 
+        0 -> len(getMarkers()). Defaults to 0.
     interp : int, optional
         Choice of the interpolation method. Defaults to 2.
             1 : no interpolation
@@ -482,17 +506,12 @@ class SfMarkerLooper(PyoObject):
     mark : float or PyoObject, Marker to loop.
     interp : int {1, 2, 3, 4}, Interpolation method.
 
-    Notes:
-
-    Reading backward with fast changes at audio rate can generates strong 
-    DC in the resulting sound.
-
     Examples:
 
     >>> s = Server().boot()
     >>> s.start()
     >>> a = SfMarkerLooper(SNDS_PATH + '/transparent.aif').out()
-    >>> rnd = RandInt(len(a.getMarkers()), 100)
+    >>> rnd = RandInt(len(a.getMarkers()), 2)
     >>> a.mark = rnd
 
     """
@@ -531,20 +550,22 @@ class SfMarkerLooper(PyoObject):
             obj.deleteStream()
             del obj
 
-    def play(self):
-        self._base_players = [obj.play() for obj in self._base_players]
-        self._base_objs = [obj.play() for obj in self._base_objs]
+    def play(self, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_players = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_players)]
+        self._base_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         return self
 
-    def out(self, chnl=0, inc=1):
-        self._base_players = [obj.play() for obj in self._base_players]
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_players = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_players)]
         if type(chnl) == ListType:
-            self._base_objs = [obj.out(wrap(chnl,i)) for i, obj in enumerate(self._base_objs)]
+            self._base_objs = [obj.out(wrap(chnl,i), wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         else:
             if chnl < 0:    
-                self._base_objs = [obj.out(i*inc) for i, obj in enumerate(random.sample(self._base_objs, len(self._base_objs)))]
+                self._base_objs = [obj.out(i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(random.sample(self._base_objs, len(self._base_objs)))]
             else:   
-                self._base_objs = [obj.out(chnl+i*inc) for i, obj in enumerate(self._base_objs)]
+                self._base_objs = [obj.out(chnl+i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         return self
 
     def stop(self):
@@ -601,11 +622,11 @@ class SfMarkerLooper(PyoObject):
         """
         return self._markers
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(0.01, 2., 'lin', 'speed', self._speed), 
                           SLMap(0, len(self._markers)-1, 'lin', 'mark', self._mark, 'int'),
                           SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def speed(self): 

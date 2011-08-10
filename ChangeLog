@@ -1,0 +1,251 @@
+2011-05-18 belangeo <belangeo@gmail.com>
+
+    * Added getVersion() function and upgrade version number to '0.4.1'.
+	- rev 645		
+
+2011-05-18 belangeo <belangeo@gmail.com>
+
+    * Improved soundfile player family (SfPlayer, SfMarkerShuffler and SfMarkerLooper).
+	- rev 644		
+
+2011-05-13 belangeo <belangeo@gmail.com>
+
+    * New object : FourBand (linear phase spectrum splitter).
+	- rev 640		
+
+2011-05-11 belangeo <belangeo@gmail.com>
+
+    * New object : ParaTable (parabola window function).
+	- rev 637		
+
+2011-05-11 belangeo <belangeo@gmail.com>
+
+    * Added 'outputAmp' argument to Compress and Gate. Useful to link several channels.
+	- rev 636
+
+2011-05-10 belangeo <belangeo@gmail.com>
+
+    * New object: Gate (noise gate).
+	- rev 635		
+
+2011-05-10 belangeo <belangeo@gmail.com>
+
+    * New object: Follower2 (different attack and release times).
+	- rev 634	
+
+2011-05-10 belangeo <belangeo@gmail.com>
+
+    * Completely redesigned Follower.
+	- rev 633	
+
+2011-05-10 belangeo <belangeo@gmail.com>
+
+    * Completely redesigned Compress.
+	- rev 632		
+
+2011-05-05 belangeo <belangeo@gmail.com>
+
+    * SigTo can be used with PyoObject as input value.
+	- rev 631		
+
+2011-05-03 belangeo <belangeo@gmail.com>
+ 
+    * Port filter optimization.
+	- rev 630		
+	
+	
+2011-05-03 belangeo <belangeo@gmail.com>	
+
+    * Fixed glitches in objects using recursive delay lines.
+	- rev 629
+
+2011-05-02	belangeo <belangeo@gmail.com>
+
+	* Fixed bug in Expseg and TrigExpseg "exp" argument initilization.		
+	- rev 624
+
+
+2011-02-29 belangeo <belangeo@gmail.com>
+
+    * rev 622 - pyo 0.4.0 release.
+
+2011-04-26 belangeo <belangeo@gmail.com>
+
+    * Added new object : OscBank. Mixes any number of oscillators.
+    - rev 606
+
+2011-04-22 belangeo <belangeo@gmail.com>
+
+    * Added new object : FreqShift, frequency shifter using single sideband amplitude modulation.
+    - rev 605
+
+2011-04-15 belangeo <belangeo@gmail.com>
+
+    * Added new object : Denorm.
+    - rev 601
+
+2011-04-15 belangeo <belangeo@gmail.com>
+
+    * Added portaudio non-interleaved callback for ASIO support.
+    - rev 577
+
+2011-04-15 belangeo <belangeo@gmail.com>
+
+    * Fixed crash when duplex=0 on Windows
+    - rev 574
+
+2011-04-10 belangeo <belangeo@gmail.com>
+
+    * New object : MidiAdsr, a Midi triggered ADSR envelope generator.
+    - rev 572
+
+2011-04-01 belangeo <belangeo@gmail.com>
+
+    * New objects : LFO, Band-limited Low Frequency Oscillator with different wave shapes.
+    - rev 571
+
+2011-03-27 belangeo <belangeo@gmail.com>
+
+    * New chaotic attractor objects : Lorenz and Rossler
+    - rev 567
+
+2011-03-14 belangeo <belangeo@gmail.com>
+
+    * Convolution-based filter family : IRWinSinc, IRPulse, IRAverage, IRFM
+    - rev 565
+
+2011-03-02 belangeo <belangeo@gmail.com>
+
+    * Added new object : BrownNoise
+    - rev 564
+
+2011-03-02 belangeo <belangeo@gmail.com>
+
+    * Added new object : Wrap (Wraps-around the signal that exceeds the `min` and `max` thresholds.)
+    - rev 562
+
+2011-03-01 belangeo <belangeo@gmail.com>
+
+    * Added new object : Mirror (Reflects the signal that exceeds the `min` and `max` thresholds.)
+    - rev 561
+
+2011-03-01 belangeo <belangeo@gmail.com>
+
+    * Added new object : Between (Output a trig if input is between `min` and `max`)
+    - rev 558
+
+2011-02-27 belangeo <belangeo@gmail.com>
+
+    * Added new object : CrossFM
+    - rev 552
+
+2011-02-26 belangeo <belangeo@gmail.com>
+
+    * Added new object : PinkNoise
+    - rev 551
+
+2011-02-26 belangeo <belangeo@gmail.com>
+
+    * Added new object : Blit (Band Limited Impulse Train)
+    - rev 550
+
+2011-02-23 belangeo <belangeo@gmail.com>
+
+    * Added new object : AllpassWG
+    - rev 548
+
+2011-02-21 belangeo <belangeo@gmail.com>
+
+    * All trig signals can be treated as number, allowing arithmetic operations.
+    - rev 547
+
+2010-02-20 belangeo <belangeo@gmail.com>
+
+    * rev 544 - pyo 0.03 release.
+
+2010-12-30 belangeo <belangeo@gmail.com>
+
+    * Added new object : Mixer
+    - rev 537
+
+2010-12-13 belangeo <belangeo@gmail.com>
+
+    * Added graph() method to some PyoTableObjects, allowing the
+      control of the envelope's shape with a grapher window.
+    - rev 532
+
+
+2010-11-02 belangeo <belangeo@gmail.com>
+
+    * rev 515 - pyo 0.02 release.
+
+
+2010-10-24 belangeo <belangeo@gmail.com>
+
+    * Fixed timming issue.
+    - rev 507
+
+
+2010-10-09 belangeo <belangeo@gmail.com>
+
+    * Added `starttime` attribute to the server, allowing faster rendering
+      of a first part of a piece.
+    - rev 473
+
+2010-10-08 belangeo <belangeo@gmail.com>
+
+    * Added a clock of the current time in the server window and allow
+      server's customization with parameters in the .gui() method.
+    - rev 468
+
+2010-10-07 belangeo <belangeo@gmail.com>
+
+    * Added new object : MatrixMorph
+    - rev 463
+
+2010-10-04 mantaraya36 <mantaraya36@gmail.com>
+           belangeo <belangeo@gmail.com>
+    
+    * Added offline rendering.
+    - rev 452   
+
+2010-09-30 belangeo <belangeo@gmail.com>
+
+    * Added support for wxPython toolkit. If wx is installed, pyo will
+      use it instead of Tk.
+    - rev 442
+
+2010-09-23 belangeo <belangeo@gmail.com>
+
+    * Added new objet : Percent
+    - rev 434
+    
+2010-09-21 belangeo <belangeo@gmail.com>
+
+    * Added support for Coreaudio backend.
+      Build with --use-coreaudio option.
+    - rev 431
+    
+2010-09-17 mantaraya36 <mantaraya36@gmail.com>
+
+    * Added support for Jack audio backend.
+      Build with --use-jack option.
+    - rev 423
+
+2010-09-16 belangeo <belangeo@gmail.com>
+
+    * Added --use-double option to compile pyo in double version.
+    It creates a new library, called _pyo64.so, in the same directory
+    as _pyo.so. To use it, simply import pyo64 (from pyo64 import *).
+    - rev 417.
+
+2010-09-13 belangeo <belangeo@gmail.com>
+    
+    * Added "dur" and "delay" arguments to play and out methods of PyoObject.
+    - rev 413.
+    
+2010-09-06 belangeo <belangeo@gmail.com>
+
+    * rev 390 - pyo 0.01 release.
+    
+    

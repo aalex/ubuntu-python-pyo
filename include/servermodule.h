@@ -26,16 +26,46 @@ extern "C" {
 
 #include "portaudio.h"
 #include "portmidi.h"
-#include "sndfile.h"    
+#include "sndfile.h"
+#include "pyomodule.h"
 
+#ifdef USE_JACK
+#include <jack/jack.h>
+#endif
+
+#ifdef USE_COREAUDIO
+# include <CoreAudio/AudioHardware.h>
+#endif
+
+typedef enum {
+    PyoPortaudio = 0,
+    PyoCoreaudio = 1,
+    PyoJack,
+    PyoOffline
+} PyoAudioBackendType;
+
+typedef struct {
+    PaStream *stream;
+} PyoPaBackendData;
+
+typedef struct {
+#ifdef USE_JACK
+    jack_client_t *jack_client;
+    jack_port_t **jack_in_ports;
+    jack_port_t **jack_out_ports;
+#endif
+} PyoJackBackendData;
+    
 typedef struct {
     PyObject_HEAD
     PyObject *streams;
-    PaStream *stream;
+    PyoAudioBackendType audio_be_type;
+    void *audio_be_data;
+    char *serverName; /* Only used for jack client name */
     PmStream *in;
     PmEvent midiEvents[200];
     int midi_count;
-    float samplingRate;
+    double samplingRate;
     int nchnls;
     int bufferSize;
     int duplex;
@@ -44,34 +74,56 @@ typedef struct {
     int midi_input;
     int withPortMidi;
     int server_started;
-    int server_stopped; // for fadeout
+    int server_stopped; /* for fadeout */
     int server_booted;
     int stream_count;
     int record;
+    
     /* global amplitude */
-    float amp;
-    float resetAmp;
-    float lastAmp;
-    float currentAmp;
-    float stepVal;
+    MYFLT amp;
+    MYFLT resetAmp;
+    MYFLT lastAmp;
+    MYFLT currentAmp;
+    MYFLT stepVal;
     int timeStep;
     int timeCount;
     
-    float *input_buffer;
+    MYFLT *input_buffer;
+    float *output_buffer; /* Has to be float since audio callbacks must use floats */
+    
+    /* rendering offline of the first "startoffset" seconds */
+    double startoffset;
+    
+    /* rendering settings */
+    double recdur;
     char *recpath;
+    int recformat;
+    int rectype;
     SNDFILE *recfile;
     SF_INFO recinfo;
+    
     /* GUI VUMETER */
     int withGUI;
     int numPass;
     int gcount;
     float *lastRms;
     PyObject *GUI;
+
+    /* Current time */
+    unsigned long elapsedSamples; /* time since the server was started */
+    int withTIME;
+    int timePass;
+    int tcount;
+    PyObject *TIME;
+    
+    /* Properties */
+    int verbosity; /* a sum of values to display different levels: 1 = error */
+                   /* 2 = message, 4 = warning , 8 = debug. Default 7.*/
 } Server;
 
 PyObject * PyServer_get_server();
 extern PyObject * Server_removeStream(Server *self, int sid);
-extern float * Server_getInputBuffer(Server *self);    
+extern MYFLT * Server_getInputBuffer(Server *self);    
 extern PmEvent * Server_getMidiEventBuffer(Server *self);    
 extern int Server_getMidiEventCount(Server *self);    
 extern PyTypeObject ServerType;    

@@ -168,12 +168,12 @@ class Print(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setInterval(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def out(self, chnl=0, inc=1):
-        pass
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        return self
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
       
     @property
     def input(self):
@@ -212,7 +212,7 @@ class Snap(PyoObject):
     Parameters:
 
     input : PyoObject
-        Audio signal sending triggers.
+        Incoming Midi notes as an audio stream.
     choice : list of floats
         Possible values, as midi notes, for output.
     scale : int {0, 1, 2}, optional
@@ -308,9 +308,9 @@ class Snap(PyoObject):
         [obj.setScale(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self): return self._input
@@ -422,9 +422,9 @@ class Interp(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setInterp(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(0., 1., "lin", "interp", self._interp), SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
       
     @property
     def input(self):
@@ -547,9 +547,9 @@ class SampHold(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setValue(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
       
     @property
     def input(self):
@@ -630,7 +630,7 @@ class Compare(PyoObject):
     def __dir__(self):
         return ['input', 'comp', 'mode', 'mul', 'add']
 
-    def out(self, chnl=0, inc=1):
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
         return self
 
     def setInput(self, x, fadetime=0.05):
@@ -678,9 +678,9 @@ class Compare(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setMode(self.comp_dict[wrap(x,i)]) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
       
     @property
     def input(self):
@@ -720,16 +720,21 @@ class Record(PyoObject):
         Full path of the file to create.
     chnls : int, optional
         Number of channels in the audio file. Defaults to 2.
-    format : int, optional      
-        Format type of the audio file. Possible formats are:
-            0 : AIFF 32 bits float (Default)
-            1 : WAV 32 bits float
-            2 : AIFF 16 bit int
-            3 : WAV 16 bits int
-            4 : AIFF 24 bits int
-            5 : WAV 24 bits int
-            6 : AIFF 32 bits int
-            7 : WAV 32 bits int
+    fileformat : int, optional
+        Format type of the audio file. Record will first try to
+        set the format from the filename extension. If it's not possible,
+        it uses the fileformat parameter. Defaults to 0. 
+        Supported formats are:
+            0 : WAV - Microsoft WAV format (little endian) {.wav, .wave}
+            1 : AIFF - Apple/SGI AIFF format (big endian) {.aif, .aiff}
+    sampletype : int, optional
+        Bit depth encoding of the audio file. Defaults to 0.
+        Supported types are:
+            0 : 16 bits int
+            1 : 24 bits int
+            2 : 32 bits int
+            3 : 32 bits float
+            4 : 64 bits float
     buffering : int, optional
         Number of bufferSize to wait before writing samples to disk.
         High buffering uses more memory but improves performance.
@@ -757,22 +762,103 @@ class Record(PyoObject):
     >>> amp = Fader(fadein=.05, fadeout=2, dur=4, mul=.05).play()
     >>> osc = Osc(t, freq=[uniform(350,360) for i in range(10)], mul=amp).out()
     >>> home = os.path.expanduser('~')
-    >>> rec = Record(osc, filename=home+"/example_synth.aif", format=2)
+    >>> rec = Record(osc, filename=home+"/example_synth.aif", fileformat=1, sampletype=1)
     >>> clean = Clean_objects(4.5, rec)
     >>> clean.start()
 
     """
-    def __init__(self, input, filename, chnls=2, format=0, buffering=4):
+    def __init__(self, input, filename, chnls=2, fileformat=0, sampletype=0, buffering=4):
         PyoObject.__init__(self)
         self._input = input
-        self._base_objs = [Record_base(self._input.getBaseObjects(), filename, chnls, format, buffering)]
+        FORMATS = {'wav': 0, 'wave': 0, 'aif': 1, 'aiff': 1}
+        ext = filename.rsplit('.')
+        if len(ext) >= 2:
+            ext = ext[-1].lower()
+            if FORMATS.has_key(ext):
+                fileformat = FORMATS[ext]
+            else:
+                print 'Warning: Unknown file extension. Using fileformat value.'
+        else:
+            print 'Warning: Filename has no extension. Using fileformat value.'
+        self._base_objs = [Record_base(self._input.getBaseObjects(), filename, chnls, fileformat, sampletype, buffering)]
 
-    def out(self, chnl=0, inc=1):
-        pass
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        return self
 
     def __dir__(self):
         return []
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+class Denorm(PyoObject):
+    """
+    Mixes low level noise to an input signal.
+
+    Mixes low level (~1e-24 for floats, and ~1e-60 for doubles) noise to a an input signal. 
+    Can be used before IIR filters and reverbs to avoid denormalized numbers which may 
+    otherwise result in significantly increased CPU usage. 
+
+    Parent class: PyoObject
+
+    Parameters:
+
+    input : PyoObject
+        Input signal to process.
+
+    Methods:
+
+    setInput(x, fadetime) : Replace the `input` attribute.
+
+    Attributes:
+
+    input : PyoObject. Input signal to process.
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> amp = Linseg([(0,0),(2,1),(4,0)]).play()
+    >>> a = Sine(freq=1000, mul=0.01*amp)
+    >>> den = Denorm(a)
+    >>> rev = Freeverb(den, size=.9).out()
+
+    """
+    def __init__(self, input, mul=1, add=0):
+        PyoObject.__init__(self)
+        self._input = input
+        self._mul = mul
+        self._add = add
+        self._in_fader = InputFader(input)
+        in_fader, mul, add, lmax = convertArgsToLists(self._in_fader, mul, add)
+        self._base_objs = [Denorm_base(wrap(in_fader,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
+
+    def __dir__(self):
+        return ['input', 'mul', 'add']
+
+    def setInput(self, x, fadetime=0.05):
+        """
+        Replace the `input` attribute.
+
+        Parameters:
+
+        x : PyoObject
+            New signal to process.
+        fadetime : float, optional
+            Crossfade time between old and new input. Default to 0.05.
+
+        """
+        self._input = x
+        self._in_fader.setInput(x, fadetime)
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = []
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    @property
+    def input(self):
+        """PyoObject. Input signal to filter.""" 
+        return self._input
+    @input.setter
+    def input(self, x): self.setInput(x)

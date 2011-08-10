@@ -72,7 +72,10 @@ class OscSend(PyoObject):
     
     OscSend has no `mul` and `add` attributes.
 
+    Examples:
 
+    >>> s = Server().boot()
+    >>> s.start()
     >>> a = Sine(freq=[1,1.5], mul=100, add=[600, 1000])
     >>> b = OscSend(a, port=10000, address=['/pit1','/pit2'])
     
@@ -102,7 +105,7 @@ class OscSend(PyoObject):
         self._input = x
         self._in_fader.setInput(x, fadetime)
             
-    def out(self, chnl=0, inc=1):
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
         return self
 
     def setMul(self, x):
@@ -111,9 +114,9 @@ class OscSend(PyoObject):
     def setAdd(self, x):
         pass    
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -220,10 +223,10 @@ class OscReceive(PyoObject):
         else:
             return [obj._getStream().getValue() for obj in self._base_objs]
              
-    def out(self, chnl=0, inc=1):
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
         return self
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
         

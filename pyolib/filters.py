@@ -144,9 +144,9 @@ class Biquad(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setType(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMapFreq(self._freq), SLMapQ(self._q), SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -319,9 +319,9 @@ class Biquadx(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setStages(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMapFreq(self._freq), SLMapQ(self._q), SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -501,11 +501,11 @@ class EQ(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setType(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMapFreq(self._freq), SLMapQ(self._q), 
                           SLMap(-40.0, 40.0, "lin", "boost", self._boost), 
                           SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -615,9 +615,9 @@ class Tone(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setFreq(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMapFreq(self._freq), SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
       
     @property
     def input(self):
@@ -734,10 +734,10 @@ class Port(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setFallTime(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(0.001, 10., 'lin', 'risetime', self._risetime),
                           SLMap(0.001, 10., 'lin', 'falltime', self._falltime)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -815,9 +815,9 @@ class DCBlock(PyoObject):
         self._input = x
         self._in_fader.setInput(x, fadetime)
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
       
     @property
     def input(self):
@@ -831,8 +831,9 @@ class BandSplit(PyoObject):
     Splits an input signal into multiple frequency bands.
     
     The input signal will be separated into `num` bands between `min` 
-    and `max` frequencies. Each band will then be assigned to an 
-    independent audio stream. Useful for multiband processing.
+    and `max` frequencies using second-order bandpass filters. Each 
+    band will then be assigned to an independent audio stream. 
+    Useful for multiband processing.
 
     Parent class: PyoObject
     
@@ -930,20 +931,22 @@ class BandSplit(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setQ(wrap(x,i)) for i, obj in enumerate(self._base_players)]
                         
-    def play(self):
-        self._base_players = [obj.play() for obj in self._base_players]
-        self._base_objs = [obj.play() for obj in self._base_objs]
+    def play(self, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_players = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_players)]
+        self._base_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         return self
 
-    def out(self, chnl=0, inc=1):
-        self._base_players = [obj.play() for obj in self._base_players]
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_players = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_players)]
         if type(chnl) == ListType:
-            self._base_objs = [obj.out(wrap(chnl,i)) for i, obj in enumerate(self._base_objs)]
+            self._base_objs = [obj.out(wrap(chnl,i), wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         else:
             if chnl < 0:    
-                self._base_objs = [obj.out(i*inc) for i, obj in enumerate(random.sample(self._base_objs, len(self._base_objs)))]
+                self._base_objs = [obj.out(i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(random.sample(self._base_objs, len(self._base_objs)))]
             else:   
-                self._base_objs = [obj.out(chnl+i*inc) for i, obj in enumerate(self._base_objs)]
+                self._base_objs = [obj.out(chnl+i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         return self
     
     def stop(self):
@@ -951,9 +954,9 @@ class BandSplit(PyoObject):
         [obj.stop() for obj in self._base_objs]
         return self
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMapQ(self._q), SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -969,9 +972,216 @@ class BandSplit(PyoObject):
     @q.setter
     def q(self, x): self.setQ(x) 
 
+class FourBand(PyoObject):
+    """
+    Splits an input signal into four frequency bands.
+
+    The input signal will be separated into 4 bands around `freqs` 
+    arguments using fourth-order Linkwitz-Riley lowpass and highpass 
+    filters. Each band will then be assigned to an independent audio 
+    stream. The sum of the four bands reproduces the same signal as 
+    the `input`. Useful for multiband processing.
+
+    Parent class: PyoObject
+
+    Parameters:
+
+    input : PyoObject
+        Input signal to filter.
+    freq1 : float or PyoObject, optional
+        First crossover frequency. First band will contain signal
+        from 0 Hz to `freq1` Hz. Defaults to 150.
+    freq2 : float or PyoObject, optional
+        Second crossover frequency. Second band will contain signal
+        from `freq1` Hz to `freq2`. `freq2` is the lower limit of the
+        third band signal. Defaults to 500.
+    freq3 : float or PyoObject, optional
+        Third crossover frequency. It's the upper limit of the third
+        band signal and fourth band will contain signal from `freq3`
+        to sr/2. Defaults to 2000.
+
+    Methods:
+
+    setInput(x, fadetime) : Replace the `input` attribute.
+    setFreq1(x) : Replace the `freq1` attribute.
+    setFreq2(x) : Replace the `freq2` attribute.
+    setFreq3(x) : Replace the `freq3` attribute.
+
+    Attributes:
+
+    input : PyoObject. Input signal to filter.
+    freq1 : float or PyoObject. First crossover frequency.
+    freq2 : float or PyoObject. Second crossover frequency.
+    freq3 : float or PyoObject. Third crossover frequency.
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> lfos = Sine(freq=[.3,.4,.5,.6], mul=.5, add=.5)
+    >>> n = BrownNoise(.5)
+    >>> a = FourBand(n, freq1=250, freq2=1000, freq3=2500, mul=lfos).out()
+
+    """
+    def __init__(self, input, freq1=150, freq2=500, freq3=2000, mul=1, add=0):
+        PyoObject.__init__(self)
+        self._input = input
+        self._freq1 = freq1
+        self._freq2 = freq2
+        self._freq3 = freq3
+        self._mul = mul
+        self._add = add
+        self._in_fader = InputFader(input)
+        in_fader, freq1, freq2, freq3, lmax = convertArgsToLists(self._in_fader, freq1, freq2, freq3)
+        mul, add, lmax2 = convertArgsToLists(mul, add)
+        self._base_players = [FourBandMain_base(wrap(in_fader,i), wrap(freq1,i), wrap(freq2,i), wrap(freq3,i)) for i in range(lmax)]
+        self._base_objs = []
+        for i in range(lmax):
+            for j in range(4):
+                self._base_objs.append(FourBand_base(wrap(self._base_players,i), j, wrap(mul,j), wrap(add,j)))
+
+    def __dir__(self):
+        return ['input', 'freq1', 'freq2', 'freq3', 'mul', 'add']
+
+    def __del__(self):
+        for obj in self._base_objs:
+            obj.deleteStream()
+            del obj
+        for obj in self._base_players:
+            obj.deleteStream()
+            del obj
+
+    def setInput(self, x, fadetime=0.05):
+        """
+        Replace the `input` attribute.
+
+        Parameters:
+
+        x : PyoObject
+            New signal to process.
+        fadetime : float, optional
+            Crossfade time between old and new input. Defaults to 0.05.
+
+        """
+        self._input = x
+        self._in_fader.setInput(x, fadetime)
+
+    def setFreq1(self, x):
+        """
+        Replace the `freq1` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            new `freq1` attribute.
+
+        """
+        self._freq1 = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setFreq1(wrap(x,i)) for i, obj in enumerate(self._base_players)]
+
+    def setFreq2(self, x):
+        """
+        Replace the `freq2` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            new `freq2` attribute.
+
+        """
+        self._freq2 = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setFreq2(wrap(x,i)) for i, obj in enumerate(self._base_players)]
+
+    def setFreq3(self, x):
+        """
+        Replace the `freq3` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            new `freq3` attribute.
+
+        """
+        self._freq3 = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setFreq3(wrap(x,i)) for i, obj in enumerate(self._base_players)]
+
+    def play(self, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_players = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_players)]
+        self._base_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
+        return self
+
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_players = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_players)]
+        if type(chnl) == ListType:
+            self._base_objs = [obj.out(wrap(chnl,i), wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
+        else:
+            if chnl < 0:    
+                self._base_objs = [obj.out(i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(random.sample(self._base_objs, len(self._base_objs)))]
+            else:   
+                self._base_objs = [obj.out(chnl+i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
+        return self
+
+    def stop(self):
+        [obj.stop() for obj in self._base_players]
+        [obj.stop() for obj in self._base_objs]
+        return self
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = [SLMap(40,300,"log","freq1",self._freq1),
+                          SLMap(300,1000,"log","freq2",self._freq2),
+                          SLMap(1000,5000,"log","freq3",self._freq3),
+                          SLMapMul(self._mul)]
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    @property
+    def input(self):
+        """PyoObject. Input signal to filter.""" 
+        return self._input
+    @input.setter
+    def input(self, x): self.setInput(x)
+
+    @property
+    def freq1(self): 
+        """float or PyoObject. First crossover frequency."""
+        return self._freq1
+    @freq1.setter
+    def freq1(self, x): self.setFreq1(x) 
+
+    @property
+    def freq2(self): 
+        """float or PyoObject. Second crossover frequency."""
+        return self._freq2
+    @freq2.setter
+    def freq2(self, x): self.setFreq2(x) 
+
+    @property
+    def freq3(self): 
+        """float or PyoObject. Third crossover frequency."""
+        return self._freq3
+    @freq3.setter
+    def freq3(self, x): self.setFreq3(x) 
+
 class Hilbert(PyoObject):
     """
     Hilbert transform.
+    
+    Hilbert is an IIR filter based implementation of a broad-band 90 degree 
+    phase difference network. The outputs of hilbert have an identical 
+    frequency response to the input (i.e. they sound the same), but the two 
+    outputs have a constant phase difference of 90 degrees, plus or minus some 
+    small amount of error, throughout the entire frequency range. The outputs 
+    are in quadrature.
+
+    Hilbert is useful in the implementation of many digital signal processing 
+    techniques that require a signal in phase quadrature. ar1 corresponds to the 
+    cosine output of hilbert, while ar2 corresponds to the sine output. The two 
+    outputs have a constant phase difference throughout the audio range that 
+    corresponds to the phase relationship between cosine and sine waves.
     
     Parent class : PyoObject
     
@@ -1000,14 +1210,16 @@ class Hilbert(PyoObject):
     
     Examples:
     
-    >>> a = SfPlayer(SNDS_PATH + "/accord.aif", loop=True).out()
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> a = SfPlayer(SNDS_PATH + "/accord.aif", loop=True).out(0)
     >>> b = Hilbert(a)
     >>> quad = Sine([250, 500], [0, .25])
     >>> mod1 = b['real'] * quad[0]
     >>> mod2 = b['imag'] * quad[1]
     >>> up = mod1 - mod2
     >>> down = mod1 + mod2
-    >>> up.out()
+    >>> up.out(1)
 
     """
     def __init__(self, input, mul=1, add=0):
@@ -1023,8 +1235,9 @@ class Hilbert(PyoObject):
         self._base_players = [HilbertMain_base(wrap(in_fader,i)) for i in range(lmax)]
         self._base_objs = []
         for i in range(lmax2):
-            self._base_objs.append(Hilbert_base(wrap(self._base_players,i), 0, wrap(mul,i), wrap(add,i)))
-            self._base_objs.append(Hilbert_base(wrap(self._base_players,i), 1, wrap(mul,i), wrap(add,i)))
+            for j in range(lmax):
+                self._base_objs.append(Hilbert_base(wrap(self._base_players,j), 0, wrap(mul,i), wrap(add,i)))
+                self._base_objs.append(Hilbert_base(wrap(self._base_players,j), 1, wrap(mul,i), wrap(add,i)))
 
     def __dir__(self):
         return ['input', 'mul', 'add']
@@ -1088,20 +1301,22 @@ class Hilbert(PyoObject):
         self._input = x
         self._in_fader.setInput(x, fadetime)
                     
-    def play(self):
-        self._base_players = [obj.play() for obj in self._base_players]
-        self._base_objs = [obj.play() for obj in self._base_objs]
+    def play(self, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_players = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_players)]
+        self._base_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         return self
 
-    def out(self, chnl=0, inc=1):
-        self._base_players = [obj.play() for obj in self._base_players]
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_players = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_players)]
         if type(chnl) == ListType:
-            self._base_objs = [obj.out(wrap(chnl,i)) for i, obj in enumerate(self._base_objs)]
+            self._base_objs = [obj.out(wrap(chnl,i), wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         else:
             if chnl < 0:    
-                self._base_objs = [obj.out(i*inc) for i, obj in enumerate(random.sample(self._base_objs, len(self._base_objs)))]
+                self._base_objs = [obj.out(i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(random.sample(self._base_objs, len(self._base_objs)))]
             else:   
-                self._base_objs = [obj.out(chnl+i*inc) for i, obj in enumerate(self._base_objs)]
+                self._base_objs = [obj.out(chnl+i*inc, wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
         return self
     
     def stop(self):
@@ -1109,9 +1324,9 @@ class Hilbert(PyoObject):
         [obj.stop() for obj in self._base_objs]
         return self
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = []
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -1230,11 +1445,11 @@ class Allpass(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setFeedback(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(0.001, self._maxdelay, 'log', 'delay',  self._delay),
                           SLMap(0., 1., 'lin', 'feedback', self._feedback),
                           SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -1359,10 +1574,10 @@ class Allpass2(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setBw(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMapFreq(self._freq), SLMap(10, 1000, "lin", "bw", self._bw), 
                           SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -1526,13 +1741,13 @@ class Phaser(PyoObject):
         x, lmax = convertArgsToLists(x)
         [obj.setFeedback(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
 
-    def ctrl(self, map_list=None, title=None):
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
         self._map_list = [SLMap(20, 2000, "log", "freq", self._freq), 
                           SLMap(0.5, 2, "lin", "spread", self._spread),
                           SLMap(0.5, 100, "log", "q", self._q), 
                           SLMap(0, 1, "lin", "feedback", self._feedback),
                           SLMapMul(self._mul)]
-        PyoObject.ctrl(self, map_list, title)
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
 
     @property
     def input(self):
@@ -1568,3 +1783,611 @@ class Phaser(PyoObject):
         return self._feedback
     @feedback.setter
     def feedback(self, x): self.setFeedback(x)
+
+class IRWinSinc(PyoObject):
+    """
+    Windowed-sinc filter using circular convolution.
+    
+    IRWinSinc uses circular convolution to implement standard filters like 
+    lowpass, highpass, bandreject and bandpass with very flat passband 
+    response and sharp roll-off. User can defined the length, in samples,
+    of the impulse response, also known as the filter kernel.
+
+    Parent class: PyoObject
+
+    Parameters:
+
+    input : PyoObject
+        Input signal to filter.
+    freq : float or PyoObject, optional
+        Frequency cutoff for lowpass and highpass and center frequency for
+        bandjrect and bandpass filters, expressed in Hertz. Defaults to 1000.
+    bw : float or PyoObject, optional
+        Bandwidth, expressed in Hertz, for bandreject and bandpass filters.
+        Defaults to 500.
+    type : int, optional
+        Filter type. Four possible values :
+            0 = lowpass (default)
+            1 = highpass
+            2 = bandreject
+            3 = bandpass
+    order : int {even number}, optional
+        Length, in samples, of the filter kernel used for convolution. Available 
+        at initialization time only. This value must be even. Higher is the order 
+        and sharper is the roll-off of the filter, but it is also more expensive 
+        to compute, watch your CPU! Defaults to 256.
+
+    Methods:
+
+    setInput(x, fadetime) : Replace the `input` attribute.
+    setFreq(x) : Replace the `freq` attribute.
+    setBw(x) : Replace the `bw` attribute.
+    setType(x) : Replace the `type` attribute.
+
+    Attributes:
+
+    input : PyoObject. Input signal to filter.
+    freq : float or PyoObject. Cutoff or center frequency, in Hz, of the filter.
+    bw : float or PyoObject. Bandwidth, in Hz, for bandreject and bandpass filters.
+    type : int. Filter type {0 = lowpass, 1 = highpass, 2 = bandreject, 3 = bandpass}.
+
+    Notes :
+
+    Convolution is very expensive to compute, so the length of the impulse 
+    response (the `order` parameter) must be kept very short to run in real time.
+    
+    Note that although `freq` and `bw` can be PyoObjects, the impulse response of
+    the filter is only updated once per buffer size.
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> a = Noise(.5)
+    >>> lfr = Sine(.2, mul=2000, add=3500)
+    >>> lbw = Sine(.25, mul=1000, add=1500)
+    >>> b = IRWinSinc(a, freq=lfr, bw=lbw, type=3, order=256).out()
+
+    """
+    def __init__(self, input, freq=1000, bw=500, type=0, order=256, mul=1, add=0):
+        PyoObject.__init__(self)
+        self._input = input
+        self._freq = freq
+        self._bw = bw
+        self._type = type
+        if (order % 2) != 0:
+            order += 1
+            print "order argument of IRWinSinc must be even, set to %i" % order
+        self._order = order
+        self._mul = mul
+        self._add = add
+        self._in_fader = InputFader(input)
+        in_fader, freq, bw, type, order, mul, add, lmax = convertArgsToLists(self._in_fader, freq, bw, type, order, mul, add)                     
+        self._base_objs = [IRWinSinc_base(wrap(in_fader,i), wrap(freq,i), wrap(bw,i), wrap(type,i), wrap(order,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
+
+    def __dir__(self):
+        return ['input', 'freq', 'bw', 'type', 'mul', 'add']
+
+    def setInput(self, x, fadetime=0.05):
+        """
+        Replace the `input` attribute.
+
+        Parameters:
+
+        x : PyoObject
+            New signal to process.
+        fadetime : float, optional
+            Crossfade time between old and new input. Default to 0.05.
+
+        """
+        self._input = x
+        self._in_fader.setInput(x, fadetime)
+
+    def setFreq(self, x):
+        """
+        Replace the `freq` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            New `freq` attribute.
+
+        """
+        self._freq = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setFreq(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setBw(self, x):
+        """
+        Replace the `bw` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            New `bw` attribute.
+
+        """
+        self._bw = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setBandwidth(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setType(self, x):
+        """
+        Replace the `type` attribute.
+
+        Parameters:
+
+        x : int
+            New `type` attribute. 
+            0 = lowpass, 1 = highpass, 2 = bandreject, 3 = bandpass
+
+        """
+        self._type = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setType(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = [SLMapFreq(self._freq),
+                          SLMap(20., 10000., "log", "bw", self._bw)]
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    @property
+    def input(self):
+        """PyoObject. Input signal to filter.""" 
+        return self._input
+    @input.setter
+    def input(self, x): self.setInput(x)
+
+    @property
+    def freq(self):
+        """float or PyoObject. Cutoff or Center frequency of the filter.""" 
+        return self._freq
+    @freq.setter
+    def freq(self, x): self.setFreq(x)
+
+    @property
+    def bw(self):
+        """float or PyoObject. Bandwidth for bandreject and bandpass filters.""" 
+        return self._bw
+    @bw.setter
+    def bw(self, x): self.setBw(x)
+
+    @property
+    def type(self):
+        """int. Filter type {0 = lowpass, 1 = highpass, 2 = bandreject, 3 = bandpass}.""" 
+        return self._type
+    @type.setter
+    def type(self, x): self.setType(x)
+
+class IRAverage(PyoObject):
+    """
+    Moving average filter using circular convolution.
+
+    IRAverqge uses circular convolution to implement an average filter. This
+    filter is designed to reduce the noise in the input signal while keeping
+    as much as possible the step response of the original signal. User can 
+    defined the length, in samples, of the impulse response, also known as 
+    the filter kernel. This controls the ratio of removed noise vs the fidelity
+    of the original step response.
+
+    Parent class: PyoObject
+
+    Parameters:
+
+    input : PyoObject
+        Input signal to filter.
+    order : int {even number}, optional
+        Length, in samples, of the filter kernel used for convolution. Available 
+        at initialization time only. This value must be even. A high order will
+        reduced more noise and will have a higher damping effect on the step
+        response, but it is also more expensive to compute, watch your CPU! 
+        Defaults to 256.
+
+    Methods:
+
+    setInput(x, fadetime) : Replace the `input` attribute.
+
+    Attributes:
+
+    input : PyoObject. Input signal to filter.
+
+    Notes :
+
+    Convolution is very expensive to compute, so the length of the impulse 
+    response (the `order` parameter) must be kept very short to run in real time.
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> nz = Noise(.05)
+    >>> a = Sine(400, mul=.5, add=nz)
+    >>> b = IRAverage(a, order=32).out()
+
+    """
+    def __init__(self, input, order=256, mul=1, add=0):
+        PyoObject.__init__(self)
+        self._input = input
+        if (order % 2) != 0:
+            order += 1
+            print "order argument of IRAverage must be even, set to %i" % order
+        self._order = order
+        self._mul = mul
+        self._add = add
+        self._in_fader = InputFader(input)
+        in_fader, order, mul, add, lmax = convertArgsToLists(self._in_fader, order, mul, add)                     
+        self._base_objs = [IRAverage_base(wrap(in_fader,i), wrap(order,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
+
+    def __dir__(self):
+        return ['input', 'mul', 'add']
+
+    def setInput(self, x, fadetime=0.05):
+        """
+        Replace the `input` attribute.
+
+        Parameters:
+
+        x : PyoObject
+            New signal to process.
+        fadetime : float, optional
+            Crossfade time between old and new input. Default to 0.05.
+
+        """
+        self._input = x
+        self._in_fader.setInput(x, fadetime)
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = []
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    @property
+    def input(self):
+        """PyoObject. Input signal to filter.""" 
+        return self._input
+    @input.setter
+    def input(self, x): self.setInput(x)
+
+class IRPulse(PyoObject):
+    """
+    Comb-like filter using circular convolution.
+
+    IRPulse uses circular convolution to implement standard comb-like 
+    filters consisting of an harmonic series with fundamental `freq` and 
+    a comb filter with the first notch at `bw` frequency. The `type` 
+    parameter defines variations of this pattern. User can defined the length, 
+    in samples, of the impulse response, also known as the filter kernel.
+
+    Parent class: PyoObject
+
+    Parameters:
+
+    input : PyoObject
+        Input signal to filter.
+    freq : float or PyoObject, optional
+        Fundamental frequency of the spikes in the filter's spectrum, expressed 
+        in Hertz. Defaults to 500.
+    bw : float or PyoObject, optional
+        Frequency, expressed in Hertz, of the first notch in the comb filtering.
+        Defaults to 2500.
+    type : int, optional
+        Filter type. Four possible values :
+            0 = Pulse & comb (default)
+            1 = Pulse & comb & lowpass
+            2 = Pulse (odd harmonics) & comb
+            3 = Pulse (odd harmonics) & comb & lowpass
+    order : int {even number}, optional
+        Length, in samples, of the filter kernel used for convolution. Available 
+        at initialization time only. This value must be even. Higher is the order 
+        and sharper is the roll-off of the filter, but it is also more expensive 
+        to compute, watch your CPU! Defaults to 256.
+
+    Methods:
+
+    setInput(x, fadetime) : Replace the `input` attribute.
+    setFreq(x) : Replace the `freq` attribute.
+    setBw(x) : Replace the `bw` attribute.
+    setType(x) : Replace the `type` attribute.
+
+    Attributes:
+
+    input : PyoObject. Input signal to filter.
+    freq : float or PyoObject. Fundamental frequency of the spikes.
+    bw : float or PyoObject. Frequency of the comb's first notch.
+    type : int. Filter type {0 = pulse, 1 = pulse_lp, 2 = pulse_odd, 3 = pulse_odd_lp}.
+
+    Notes :
+
+    Convolution is very expensive to compute, so the length of the impulse 
+    response (the `order` parameter) must be kept very short to run in real time.
+
+    Note that although `freq` and `bw` can be PyoObjects, the impulse response of
+    the filter is only updated once per buffer size.
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> a = Noise(.5)
+    >>> b = IRPulse(a, freq=250, bw=2500, type=3, order=256).out()
+
+    """
+    def __init__(self, input, freq=500, bw=2500, type=0, order=256, mul=1, add=0):
+        PyoObject.__init__(self)
+        self._input = input
+        self._freq = freq
+        self._bw = bw
+        self._type = type
+        if (order % 2) != 0:
+            order += 1
+            print "order argument of IRPulse must be even, set to %i" % order
+        self._order = order
+        self._mul = mul
+        self._add = add
+        self._in_fader = InputFader(input)
+        in_fader, freq, bw, type, order, mul, add, lmax = convertArgsToLists(self._in_fader, freq, bw, type, order, mul, add)                     
+        self._base_objs = [IRPulse_base(wrap(in_fader,i), wrap(freq,i), wrap(bw,i), wrap(type,i), wrap(order,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
+
+    def __dir__(self):
+        return ['input', 'freq', 'bw', 'type', 'mul', 'add']
+
+    def setInput(self, x, fadetime=0.05):
+        """
+        Replace the `input` attribute.
+
+        Parameters:
+
+        x : PyoObject
+            New signal to process.
+        fadetime : float, optional
+            Crossfade time between old and new input. Default to 0.05.
+
+        """
+        self._input = x
+        self._in_fader.setInput(x, fadetime)
+
+    def setFreq(self, x):
+        """
+        Replace the `freq` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            New `freq` attribute.
+
+        """
+        self._freq = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setFreq(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setBw(self, x):
+        """
+        Replace the `bw` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            New `bw` attribute.
+
+        """
+        self._bw = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setBandwidth(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setType(self, x):
+        """
+        Replace the `type` attribute.
+
+        Parameters:
+
+        x : int
+            New `type` attribute. 
+            0 = lowpass, 1 = highpass, 2 = bandreject, 3 = bandpass
+
+        """
+        self._type = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setType(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = [SLMapFreq(self._freq),
+                          SLMap(20., 10000., "log", "bw", self._bw)]
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    @property
+    def input(self):
+        """PyoObject. Input signal to filter.""" 
+        return self._input
+    @input.setter
+    def input(self, x): self.setInput(x)
+
+    @property
+    def freq(self):
+        """float or PyoObject. Cutoff or Center frequency of the filter.""" 
+        return self._freq
+    @freq.setter
+    def freq(self, x): self.setFreq(x)
+
+    @property
+    def bw(self):
+        """float or PyoObject. Bandwidth for bandreject and bandpass filters.""" 
+        return self._bw
+    @bw.setter
+    def bw(self, x): self.setBw(x)
+
+    @property
+    def type(self):
+        """int. Filter type {0 = lowpass, 1 = highpass, 2 = bandreject, 3 = bandpass}.""" 
+        return self._type
+    @type.setter
+    def type(self, x): self.setType(x)
+
+class IRFM(PyoObject):
+    """
+    Filters a signal with a frequency modulation spectrum using circular convolution.
+
+    IRFM uses circular convolution to implement filtering with a frequency 
+    modulation spectrum. User can defined the length, in samples, of the 
+    impulse response, also known as the filter kernel. The higher the `order`,
+    the narrower the bandwidth around each of the FM components.
+
+    Parent class: PyoObject
+
+    Parameters:
+
+    input : PyoObject
+        Input signal to filter.
+    carrier : float or PyoObject, optional
+        Carrier frequency in cycles per second. Defaults to 1000.
+    bw : float or PyoObject, optional
+        A factor that, when multiplied by the `carrier` parameter, 
+        gives the modulator frequency. Defaults to 0.5.
+    index : float or PyoObject, optional
+        The modulation index. This value multiplied by the modulator
+        frequency gives the modulator amplitude. Defaults to 3.
+    order : int {even number}, optional
+        Length, in samples, of the filter kernel used for convolution. Available 
+        at initialization time only. This value must be even. Higher is the order 
+        and sharper is the roll-off of the filter, but it is also more expensive 
+        to compute, watch your CPU! Defaults to 256.
+
+    Methods:
+
+    setInput(x, fadetime) : Replace the `input` attribute.
+    setCarrier(x) : Replace the `carrier` attribute.
+    setRatio(x) : Replace the `ratio` attribute.
+    setIndex(x) : Replace the `index` attribute.
+
+    Attributes:
+
+    input : PyoObject. Input signal to filter.
+    carrier : float or PyoObject. Carrier frequency in Hz.
+    ratio : float or PyoObject. Modulator/carrier ratio.
+    index : float or PyoObject.The modulation index.
+
+    Notes :
+
+    Convolution is very expensive to compute, so the length of the impulse 
+    response (the `order` parameter) must be kept very short to run in real time.
+
+    Note that although `carrier`, `ratio` and `index` can be PyoObjects, the 
+    impulse response of the filter is only updated once per buffer size.
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> nz = Noise(.5)
+    >>> lf = Sine(freq=.25, mul=.125, add=.5)
+    >>> b = IRFM(nz, carrier=3500, ratio=lf, index=3, order=256).out()
+
+    """
+    def __init__(self, input, carrier=1000, ratio=0.5, index=3, order=256, mul=1, add=0):
+        PyoObject.__init__(self)
+        self._input = input
+        self._carrier = carrier
+        self._ratio = ratio
+        self._index = index
+        if (order % 2) != 0:
+            order += 1
+            print "order argument of IRFM must be even, set to %i" % order
+        self._order = order
+        self._mul = mul
+        self._add = add
+        self._in_fader = InputFader(input)
+        in_fader, carrier, ratio, index, order, mul, add, lmax = convertArgsToLists(self._in_fader, carrier, ratio, index, order, mul, add)                     
+        self._base_objs = [IRFM_base(wrap(in_fader,i), wrap(carrier,i), wrap(ratio,i), wrap(index,i), wrap(order,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
+
+    def __dir__(self):
+        return ['input', 'carrier', 'ratio', 'index', 'mul', 'add']
+
+    def setInput(self, x, fadetime=0.05):
+        """
+        Replace the `input` attribute.
+
+        Parameters:
+
+        x : PyoObject
+            New signal to process.
+        fadetime : float, optional
+            Crossfade time between old and new input. Default to 0.05.
+
+        """
+        self._input = x
+        self._in_fader.setInput(x, fadetime)
+
+    def setCarrier(self, x):
+        """
+        Replace the `carrier` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            New `carrier` attribute.
+
+        """
+        self._carrier = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setCarrier(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setRatio(self, x):
+        """
+        Replace the `ratio` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            New `ratio` attribute.
+
+        """
+        self._ratio = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setRatio(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setIndex(self, x):
+        """
+        Replace the `index` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            New `index` attribute.
+
+        """
+        self._index = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setIndex(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = [SLMap(20., 10000., "log", "carrier", self._carrier),
+                          SLMap(0.01, 4., "log", "ratio", self._ratio),
+                          SLMap(0., 20., "lin", "index", self._index)]
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    @property
+    def input(self):
+        """PyoObject. Input signal to filter.""" 
+        return self._input
+    @input.setter
+    def input(self, x): self.setInput(x)
+
+    @property
+    def carrier(self):
+        """float or PyoObject. Carrier frequency in Hz.""" 
+        return self._carrier
+    @carrier.setter
+    def carrier(self, x): self.setCarrier(x)
+
+    @property
+    def ratio(self):
+        """float or PyoObject. Modulator/carrier ratio.""" 
+        return self._ratio
+    @ratio.setter
+    def ratio(self, x): self.setRatio(x)
+
+    @property
+    def index(self):
+        """float or PyoObject. Modulation index.""" 
+        return self._index
+    @index.setter
+    def index(self, x): self.setIndex(x)
+
