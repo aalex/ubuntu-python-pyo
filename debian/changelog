@@ -1,6 +1,18 @@
+python-pyo (0.4.1-2~natty~ppa1) natty; urgency=low
+
+  * Package for natty.
+
+ -- Alexandre Quessy <alexandre@quessy.net>  Thu, 11 Aug 2011 12:57:07 -0400
+
 python-pyo (0.4.1-2~maverick~ppa1) maverick; urgency=low
 
   * Package for maverick.
+
+ -- Alexandre Quessy <alexandre@quessy.net>  Thu, 11 Aug 2011 12:52:59 -0400
+
+python-pyo (0.4.1-2~lucid~ppa1) lucid; urgency=low
+
+  * Add --use-jack option. Package for Lucid.
 
  -- Alexandre Quessy <alexandre@quessy.net>  Thu, 11 Aug 2011 12:52:59 -0400
 
