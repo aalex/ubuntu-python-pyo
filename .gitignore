@@ -1,0 +1,7 @@
+build/
+debian/files
+debian/python-pyo.debhelper.log
+debian/python-pyo.postinst.debhelper
+debian/python-pyo.prerm.debhelper
+debian/python-pyo.substvars
+debian/python-pyo/
