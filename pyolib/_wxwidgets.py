@@ -866,7 +866,8 @@ class Grapher(wx.Panel):
         self.Bind(wx.EVT_LEFT_UP, self.MouseUp)
         self.Bind(wx.EVT_MOTION, self.MouseMotion)
         self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
-        
+        self.Bind(wx.EVT_SIZE, self.OnResize)
+
         self.mode = mode
         self.exp = exp
         self.inverse = inverse
@@ -879,6 +880,8 @@ class Grapher(wx.Panel):
         self.init = [tup for tup in init]
         self.points = init
         self.outFunction = outFunction
+        
+        self.SetFocus()
 
     def setInitPoints(self, pts):
         self.init = [(p[0],p[1]) for p in pts]
@@ -952,6 +955,10 @@ class Grapher(wx.Panel):
         if self.outFunction != None:
             values = self.getValues()
             self.outFunction(values)
+
+    def OnResize(self, evt):
+        self.Refresh()
+        evt.Skip()
 
     def OnLeave(self, evt):
         self.pos = (OFF+RAD,OFF+RAD)
@@ -1224,7 +1231,7 @@ class TableGrapher(wx.Frame):
             self.Bind(wx.EVT_MENU, self.reset, id=10002)
             self.menubar.Append(self.fileMenu, "&File")
             self.SetMenuBar(self.menubar)
-
+            
             self.clipboard = wx.Clipboard()
 
         def close(self, evt):
@@ -1249,6 +1256,7 @@ class TableGrapher(wx.Frame):
             data = wx.TextDataObject(pstr)
             ret = self.clipboard.Open()
             if ret:
+                self.clipboard.Clear()
                 self.clipboard.SetData(data)
                 self.clipboard.Close()
         
@@ -1418,9 +1426,9 @@ class ServerGUI(wx.Frame):
     def getText(self, evt):
         source = self.text.GetValue()
         self.text.Clear()
-        exec source in self.locals
         self._history.append(source)
         self._histo_count = len(self._history)
+        exec source in self.locals
 
     def onChar(self, evt):
         key = evt.GetKeyCode()

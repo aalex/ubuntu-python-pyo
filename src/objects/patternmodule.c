@@ -494,10 +494,14 @@ CallAfter_generate(CallAfter *self) {
 
     for (i=0; i<self->bufsize; i++) {
         if (self->currentTime >= self->time) {
+            if (self->arg == Py_None)
+                PyObject_Call(self->callable, PyTuple_New(0), NULL);
+            else {
+                tuple = PyTuple_New(1);
+                PyTuple_SET_ITEM(tuple, 0, self->arg);
+                PyObject_Call(self->callable, tuple, NULL);                
+            }
             PyObject_CallMethod((PyObject *)self, "stop", NULL);
-            tuple = PyTuple_New(1);
-            PyTuple_SET_ITEM(tuple, 0, self->arg);
-            PyObject_Call(self->callable, tuple, NULL);
             break;
         }
         self->currentTime += self->sampleToSec;
@@ -571,7 +575,7 @@ CallAfter_init(CallAfter *self, PyObject *args, PyObject *kwds)
     
     static char *kwlist[] = {"callable", "time", "arg", NULL};
     
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O|fO", kwlist, &calltmp, &self->time, &argtmp))
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, TYPE_O_FO, kwlist, &calltmp, &self->time, &argtmp))
         return -1; 
     
     if (! PyCallable_Check(calltmp))

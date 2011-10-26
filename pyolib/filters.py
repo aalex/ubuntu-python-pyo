@@ -884,11 +884,12 @@ class BandSplit(PyoObject):
         self._add = add
         self._in_fader = InputFader(input)
         in_fader, q, lmax = convertArgsToLists(self._in_fader, q)
+        self._op_duplicate = lmax
         mul, add, lmax2 = convertArgsToLists(mul, add)
         self._base_players = [BandSplitter_base(wrap(in_fader,i), num, min, max, wrap(q,i)) for i in range(lmax)]
         self._base_objs = []
-        for i in range(lmax):
-            for j in range(num):
+        for j in range(num):
+            for i in range(lmax):
                 self._base_objs.append(BandSplit_base(wrap(self._base_players,i), j, wrap(mul,j), wrap(add,j)))
 
     def __dir__(self):
@@ -1033,11 +1034,12 @@ class FourBand(PyoObject):
         self._add = add
         self._in_fader = InputFader(input)
         in_fader, freq1, freq2, freq3, lmax = convertArgsToLists(self._in_fader, freq1, freq2, freq3)
+        self._op_duplicate = lmax
         mul, add, lmax2 = convertArgsToLists(mul, add)
         self._base_players = [FourBandMain_base(wrap(in_fader,i), wrap(freq1,i), wrap(freq2,i), wrap(freq3,i)) for i in range(lmax)]
         self._base_objs = []
-        for i in range(lmax):
-            for j in range(4):
+        for j in range(4):
+            for i in range(lmax):
                 self._base_objs.append(FourBand_base(wrap(self._base_players,i), j, wrap(mul,j), wrap(add,j)))
 
     def __dir__(self):
@@ -1178,10 +1180,10 @@ class Hilbert(PyoObject):
     are in quadrature.
 
     Hilbert is useful in the implementation of many digital signal processing 
-    techniques that require a signal in phase quadrature. ar1 corresponds to the 
-    cosine output of hilbert, while ar2 corresponds to the sine output. The two 
-    outputs have a constant phase difference throughout the audio range that 
-    corresponds to the phase relationship between cosine and sine waves.
+    techniques that require a signal in phase quadrature. The real part corresponds 
+    to the cosine output of hilbert, while the imaginary part corresponds to the 
+    sine output. The two outputs have a constant phase difference throughout the 
+    audio range that corresponds to the phase relationship between cosine and sine waves.
     
     Parent class : PyoObject
     
@@ -1224,8 +1226,8 @@ class Hilbert(PyoObject):
     """
     def __init__(self, input, mul=1, add=0):
         PyoObject.__init__(self)
-        self._real_dummy = None
-        self._imag_dummy = None
+        self._real_dummy = []
+        self._imag_dummy = []
         self._input = input
         self._mul = mul
         self._add = add
@@ -1252,13 +1254,11 @@ class Hilbert(PyoObject):
 
     def __getitem__(self, str):
         if str == 'real':
-            if self._real_dummy == None:
-                self._real_dummy = Dummy([obj for i, obj in enumerate(self._base_objs) if (i%2) == 0])
-            return self._real_dummy
+            self._real_dummy.append(Dummy([obj for i, obj in enumerate(self._base_objs) if (i%2) == 0]))
+            return self._real_dummy[-1]
         if str == 'imag':
-            if self._imag_dummy == None:
-                self._imag_dummy = Dummy([obj for i, obj in enumerate(self._base_objs) if (i%2) == 1])
-            return self._imag_dummy
+            self._imag_dummy.append(Dummy([obj for i, obj in enumerate(self._base_objs) if (i%2) == 1]))
+            return self._imag_dummy[-1]
 
     def get(self, identifier="real", all=False):
         """

@@ -126,7 +126,6 @@ TrigRandInt_compute_next_data_frame(TrigRandInt *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -592,7 +591,6 @@ TrigRand_compute_next_data_frame(TrigRand *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -1020,7 +1018,6 @@ TrigChoice_compute_next_data_frame(TrigChoice *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -1644,7 +1641,6 @@ TrigEnv_compute_next_data_frame(TrigEnv *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -2041,7 +2037,6 @@ TrigEnvTrig_compute_next_data_frame(TrigEnvTrig *self)
         self->data[i] = tmp[i];
     }    
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -2301,7 +2296,10 @@ TrigLinseg_generate(TrigLinseg *self) {
                     self->currentValue = self->targets[self->which-1];
                 }    
                 else
-                    self->increment = (self->targets[self->which] - self->targets[self->which-1]) / ((self->times[self->which] - self->times[self->which-1]) / self->sampleToSec);
+                    if ((self->times[self->which] - self->times[self->which-1]) <= 0)
+                        self->increment = self->targets[self->which] - self->currentValue;
+                    else
+                        self->increment = (self->targets[self->which] - self->targets[self->which-1]) / ((self->times[self->which] - self->times[self->which-1]) / self->sampleToSec);
             }
             if (self->currentTime <= self->times[self->listsize-1])
                 self->currentValue += self->increment;            
@@ -2367,7 +2365,6 @@ TrigLinseg_compute_next_data_frame(TrigLinseg *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -2455,12 +2452,7 @@ TrigLinseg_init(TrigLinseg *self, PyObject *args, PyObject *kwds)
     }    
     
     (*self->mode_func_ptr)(self);
-    
-    for (i=0; i<self->bufsize; i++) {
-        self->data[i] = 0.0;
-    }
-    Stream_setData(self->stream, self->data);
-    
+
     Py_INCREF(self);
     return 0;
 }
@@ -2690,7 +2682,6 @@ TrigLinsegTrig_compute_next_data_frame(TrigLinsegTrig *self)
         self->data[i] = tmp[i];
     }    
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -2963,12 +2954,15 @@ TrigExpseg_generate(TrigExpseg *self) {
                 else {
                     self->range = self->targets[self->which] - self->targets[self->which-1];
                     self->steps = (self->times[self->which] - self->times[self->which-1]) * self->sr;
-                    self->inc = 1.0 / self->steps;
+                    if (self->steps <= 0)
+                        self->inc = 1.0;
+                    else
+                        self->inc = 1.0 / self->steps;
                     self->pointer = 0.0;                    
                 }
             }    
             if (self->currentTime <= self->times[self->listsize-1]) {
-                if (self->pointer > 1.0)
+                if (self->pointer >= 1.0)
                     self->pointer = 1.0;
                 if (self->inverse == 1 && self->range < 0.0)
                     scl = 1.0 - MYPOW(1.0 - self->pointer, self->exp);
@@ -3040,7 +3034,6 @@ TrigExpseg_compute_next_data_frame(TrigExpseg *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -3133,12 +3126,7 @@ TrigExpseg_init(TrigExpseg *self, PyObject *args, PyObject *kwds)
     }    
     
     (*self->mode_func_ptr)(self);
-    
-    for (i=0; i<self->bufsize; i++) {
-        self->data[i] = 0.0;
-    }
-    Stream_setData(self->stream, self->data);
-    
+
     Py_INCREF(self);
     return 0;
 }
@@ -3398,7 +3386,6 @@ TrigExpsegTrig_compute_next_data_frame(TrigExpsegTrig *self)
         self->data[i] = tmp[i];
     }    
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -4020,7 +4007,6 @@ TrigXnoise_compute_next_data_frame(TrigXnoise *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -4815,7 +4801,6 @@ TrigXnoiseMidi_compute_next_data_frame(TrigXnoiseMidi *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -5305,7 +5290,6 @@ Counter_compute_next_data_frame(Counter *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -5752,7 +5736,6 @@ Thresh_compute_next_data_frame(Thresh *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -6123,7 +6106,6 @@ Percent_compute_next_data_frame(Percent *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int

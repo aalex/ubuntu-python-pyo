@@ -862,3 +862,539 @@ class Denorm(PyoObject):
         return self._input
     @input.setter
     def input(self, x): self.setInput(x)
+
+class ControlRec(PyoObject):
+    """
+    Records control values and writes them in a text file.
+
+    `input` parameter must be a valid PyoObject managing any number
+    of streams, other parameters can't be in list format. The user
+    must call the `write` method to create text files on the disk.
+
+    Each line in the text files contains two values, the absolute time
+    in seconds and the sampled value.
+
+    The play() method starts the recording and is not called at the 
+    object creation time.
+
+    Parent class: PyoObject
+
+    Parameters:
+
+    input : PyoObject
+        Input signal to sample.
+    filename : string
+        Full path (without extension) used to create the files. 
+        "_000" will be added to file's names with increasing digits
+        according to the number of streams in input. The same 
+        filename can be passed to a ControlRead object to read all
+        related files.
+    rate : int, optional
+        Rate at which the input values are sampled. Defaults to 1000.
+    dur : float, optional
+        Duration of the recording, in seconds. If 0.0, the recording
+        won't stop until the end of the performance. If greater than
+        0.0, the `stop` method is automatically called at the end of
+        the recording.
+        
+    Methods:
+    
+    write() : Writes values in a text file on the disk.
+
+    Notes:
+
+    All parameters can only be set at intialization time.    
+
+    The `write` method must be called on the object to write the files 
+    on the disk.
+
+    The out() method is bypassed. ControlRec's signal can not be sent to 
+    audio outs.
+
+    ControlRec has no `mul` and `add` attributes.
+
+    See also: ControlRead
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> rnds = Randi(freq=[1,2])
+    >>> home = os.path.expanduser('~')
+    >>> rec = ControlRec(rnds, home+"/test", rate=100, dur=4).play()
+    >>> # call rec.write() to save "test_000" and "test_001" in the home directory.
+
+    """
+    def __init__(self, input, filename, rate=1000, dur=0.0):
+        PyoObject.__init__(self)
+        self._input = input
+        self._filename = filename
+        self._path, self._name = os.path.split(filename)
+        self._rate = rate
+        self._dur = dur
+        self._in_fader = InputFader(input)
+        in_fader, lmax = convertArgsToLists(self._in_fader)
+        self._base_objs = [ControlRec_base(wrap(in_fader,i), rate, dur) for i in range(lmax)]
+
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        return self
+
+    def __dir__(self):
+        return []
+
+    def write(self):
+        """
+        Writes recorded values in text files on the disk.
+        
+        """
+        for i, obj in enumerate(self._base_objs):
+            f = open(os.path.join(self._path, "%s_%03d" % (self._name, i)), "w")
+            [f.write("%f %f\n" % p) for p in obj.getData()]
+            f.close()
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = []
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+class ControlRead(PyoObject):
+    """
+    Reads control values previously stored in text files.
+
+    Read sampled sound from a table, with optional looping mode.
+
+    Parent class: PyoObject
+
+    Parameters:
+
+    filename : string
+        Full path (without extension) used to create the files. Usually
+        the same filename as the one given to a ControlRec object to 
+        record automation. The directory will be scaned and all files
+        named "filename_xxx" will add a new stream in the object.
+    rate : int, optional
+        Rate at which the values are sampled. Defaults to 1000.
+    loop : boolean, optional
+        Looping mode, False means off, True means on. 
+        Defaults to False.
+    interp : int, optional
+        Choice of the interpolation method. Defaults to 2.
+            1 : no interpolation
+            2 : linear
+            3 : cosinus
+            4 : cubic
+
+    Methods:
+
+    setRate(x) : Replace the `rate` attribute.
+    setLoop(x) : Replace the `loop` attribute.
+    setInterp(x) : Replace the `interp` attribute.
+
+    Attributes:
+
+    rate : int, Sampling frequency in cycles per second.
+    loop : boolean, Looping mode.
+    interp : int {1, 2, 3, 4}, Interpolation method.
+
+    Notes:
+
+    ControlRead will sends a trigger signal at the end of the playback if 
+    loop is off or any time it wraps around if loop is on. User can 
+    retreive the trigger streams by calling obj['trig']:
+
+    >>> rnds = ControlRead(home+"/freq_auto", loop=True)
+    >>> t = SndTable(SNDS_PATH+"/transparent.aif")
+    >>> loop = TrigEnv(rnds["trig"], t, dur=[.2,.3,.4,.5], mul=.5).out()
+
+    The out() method is bypassed. ControlRead's signal can not be sent to 
+    audio outs.
+
+    See also: ControlRec
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> home = os.path.expanduser('~')
+    >>> # assuming "test_xxx" exists in the user directory
+    >>> rnds = ControlRead(home+"/test", rate=100, loop=True)
+    >>> sines = SineLoop(freq=rnds, feedback=.05, mul=.2).out()
+
+    """
+    def __init__(self, filename, rate=1000, loop=False, interp=2, mul=1, add=0):
+        PyoObject.__init__(self)
+        self._filename = filename
+        self._path, self._name = os.path.split(filename)
+        self._rate = rate
+        self._loop = loop
+        self._interp = interp
+        self._mul = mul
+        self._add = add
+        files = sorted([f for f in os.listdir(self._path) if self._name+"_" in f])
+        mul, add, lmax = convertArgsToLists(mul, add)
+        self._base_objs = []
+        for i in range(len(files)):
+            path = os.path.join(self._path, files[i])
+            f = open(path, "r")
+            values = [float(l.split()[1]) for l in f.readlines()]
+            f.close()
+            self._base_objs.append(ControlRead_base(values, rate, loop, interp, wrap(mul,i), wrap(add,i)))
+        self._trig_objs = [ControlReadTrig_base(obj) for obj in self._base_objs]
+
+    def __dir__(self):
+        return ['rate', 'loop', 'interp', 'mul', 'add']
+
+    def __del__(self):
+        for obj in self._base_objs:
+            obj.deleteStream()
+            del obj
+        for obj in self._trig_objs:
+            obj.deleteStream()
+            del obj
+
+    def __getitem__(self, i):
+        if i == 'trig':
+            return self._trig_objs
+
+        if type(i) == SliceType:
+            return self._base_objs[i]
+        if i < len(self._base_objs):
+            return self._base_objs[i]
+        else:
+            print "'i' too large!"         
+
+    def play(self, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
+        self._trig_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._trig_objs)]
+        return self
+
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        return self
+
+    def stop(self):
+        [obj.stop() for obj in self._base_objs]
+        [obj.stop() for obj in self._trig_objs]
+        return self
+
+    def setRate(self, x):
+        """
+        Replace the `rate` attribute.
+
+        Parameters:
+
+        x : int
+            new `rate` attribute.
+
+        """
+        self._rate = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setRate(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setLoop(self, x):
+        """
+        Replace the `loop` attribute.
+
+        Parameters:
+
+        x : boolean
+            new `loop` attribute.
+
+        """
+        self._loop = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setLoop(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setInterp(self, x):
+        """
+        Replace the `interp` attribute.
+
+        Parameters:
+
+        x : int {1, 2, 3, 4}
+            new `interp` attribute.
+
+        """
+        self._interp = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setInterp(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = []
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    @property
+    def rate(self):
+        """int. Sampling frequency in cycles per second.""" 
+        return self._rate
+    @rate.setter
+    def rate(self, x): self.setRate(x)
+
+    @property
+    def loop(self): 
+        """boolean. Looping mode.""" 
+        return self._loop
+    @loop.setter
+    def loop(self, x): self.setLoop(x)
+
+    @property
+    def interp(self): 
+        """int {1, 2, 3, 4}. Interpolation method."""
+        return self._interp
+    @interp.setter
+    def interp(self, x): self.setInterp(x)
+
+class NoteinRec(PyoObject):
+    """
+    Records Notein inputs and writes them in a text file.
+
+    `input` parameter must be a Notein object managing any number
+    of streams, other parameters can't be in list format. The user
+    must call the `write` method to create text files on the disk.
+
+    Each line in the text files contains three values, the absolute time
+    in seconds, the Midi pitch and the normalized velocity.
+
+    The play() method starts the recording and is not called at the 
+    object creation time.
+
+    Parent class: PyoObject
+
+    Parameters:
+
+    input : Notein
+        Notein signal to sample.
+    filename : string
+        Full path (without extension) used to create the files. 
+        "_000" will be added to file's names with increasing digits
+        according to the number of streams in input. The same 
+        filename can be passed to a NoteinRead object to read all
+        related files.
+
+    Methods:
+
+    write() : Writes values in a text file on the disk.
+
+    Notes:
+
+    All parameters can only be set at intialization time.    
+
+    The `write` method must be called on the object to write the files 
+    on the disk.
+
+    The out() method is bypassed. NoteinRec's signal can not be sent to 
+    audio outs.
+
+    NoteinRec has no `mul` and `add` attributes.
+
+    See also: NoteinRead
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> notes = Notein(poly=2)
+    >>> home = os.path.expanduser('~')
+    >>> rec = NoteinRec(notes, home+"/test").play()
+    >>> # call rec.write() to save "test_000" and "test_001" in the home directory.
+
+    """
+    def __init__(self, input, filename):
+        PyoObject.__init__(self)
+        self._input = input
+        self._filename = filename
+        self._path, self._name = os.path.split(filename)
+        self._in_pitch = self._input["pitch"]
+        self.in_velocity = self._input["velocity"]
+        in_pitch, in_velocity, lmax = convertArgsToLists(self._in_pitch, self.in_velocity)
+        self._base_objs = [NoteinRec_base(wrap(in_pitch,i), wrap(in_velocity,i)) for i in range(lmax)]
+
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        return self
+
+    def __dir__(self):
+        return []
+
+    def write(self):
+        """
+        Writes recorded values in text files on the disk.
+
+        """
+        for i, obj in enumerate(self._base_objs):
+            f = open(os.path.join(self._path, "%s_%03d" % (self._name, i)), "w")
+            [f.write("%f %f %f\n" % p) for p in obj.getData()]
+            f.close()
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = []
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+    
+class NoteinRead(PyoObject):
+    """
+    Reads Notein values previously stored in text files.
+
+    Parent class: PyoObject
+
+    Parameters:
+
+    filename : string
+        Full path (without extension) used to create the files. Usually
+        the same filename as the one given to a NoteinRec object to 
+        record automation. The directory will be scaned and all files
+        named "filename_xxx" will add a new stream in the object.
+    loop : boolean, optional
+        Looping mode, False means off, True means on. 
+        Defaults to False.
+
+    Methods:
+
+    setLoop(x) : Replace the `loop` attribute.
+    get(identifier, all) : Return the first sample of the current buffer as a float.
+
+    Attributes:
+
+    loop : boolean, Looping mode.
+
+    Notes:
+
+    NoteinRead will sends a trigger signal at the end of the playback if 
+    loop is off or any time it wraps around if loop is on. User can 
+    retreive the trigger streams by calling obj['trig']:
+
+    >>> notes = NoteinRead(home+"/notes_rec", loop=True)
+    >>> t = SndTable(SNDS_PATH+"/transparent.aif")
+    >>> loop = TrigEnv(notes["trig"], t, dur=[.2,.3,.4,.5], mul=.25).out()
+
+    The out() method is bypassed. NoteinRead's signal can not be sent to 
+    audio outs.
+
+    See also: NoteinRec
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> home = os.path.expanduser('~')
+    >>> # assuming "test_xxx" exists in the user directory
+    >>> notes = NoteinRead(home+"/test", loop=True)
+    >>> amps = Port(notes['velocity'], 0.001, 0.5, mul=.2)
+    >>> sines = SineLoop(freq=notes['pitch'], feedback=.05, mul=amps).out()
+
+    """
+    def __init__(self, filename, loop=False, mul=1, add=0):
+        PyoObject.__init__(self)
+        self._pitch_dummy = []
+        self._velocity_dummy = []
+        self._filename = filename
+        self._path, self._name = os.path.split(filename)
+        self._loop = loop
+        self._mul = mul
+        self._add = add
+        files = sorted([f for f in os.listdir(self._path) if self._name+"_" in f])
+        mul, add, lmax = convertArgsToLists(mul, add)
+        self._base_objs = []
+        self._trig_objs = []
+        self._poly = len(files)
+        for i in range(self._poly):
+            path = os.path.join(self._path, files[i])
+            f = open(path, "r")
+            vals = [l.split() for l in f.readlines()]
+            timestamps = [float(v[0]) for v in vals]
+            pitches = [float(v[1]) for v in vals]
+            amps = [float(v[2]) for v in vals]
+            f.close()
+            self._base_objs.append(NoteinRead_base(pitches, timestamps, loop))
+            self._base_objs.append(NoteinRead_base(amps, timestamps, loop, wrap(mul,i), wrap(add,i)))
+            self._trig_objs.append(NoteinReadTrig_base(self._base_objs[-1]))
+
+    def __dir__(self):
+        return ['loop', 'mul', 'add']
+
+    def __del__(self):
+        if self._pitch_dummy:
+            [obj.deleteStream() for obj in self._pitch_dummy]
+        if self._velocity_dummy:
+            [obj.deleteStream() for obj in self._velocity_dummy]
+        self._pitch_dummy = []
+        self._velocity_dummy = []
+        for obj in self._base_objs:
+            obj.deleteStream()
+            del obj
+        for obj in self._trig_objs:
+            obj.deleteStream()
+            del obj
+
+    def __getitem__(self, str):
+        if str == 'trig':
+            return self._trig_objs
+        if str == 'pitch':
+            self._pitch_dummy.append(Dummy([self._base_objs[i*2] for i in range(self._poly)]))
+            return self._pitch_dummy[-1]
+        if str == 'velocity':
+            self._velocity_dummy.append(Dummy([self._base_objs[i*2+1] for i in range(self._poly)]))
+            return self._velocity_dummy[-1]
+
+    def get(self, identifier="pitch", all=False):
+        """
+        Return the first sample of the current buffer as a float.
+        
+        Can be used to convert audio stream to usable Python data.
+        
+        "pitch" or "velocity" must be given to `identifier` to specify
+        which stream to get value from.
+        
+        Parameters:
+
+            identifier : string {"pitch", "velocity"}
+                Address string parameter identifying audio stream.
+                Defaults to "pitch".
+            all : boolean, optional
+                If True, the first value of each object's stream
+                will be returned as a list. Otherwise, only the value
+                of the first object's stream will be returned as a float.
+                Defaults to False.
+                 
+        """
+        if not all:
+            return self.__getitem__(identifier)[0]._getStream().getValue()
+        else:
+            return [obj._getStream().getValue() for obj in self.__getitem__(identifier).getBaseObjects()]
+ 
+    def play(self, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
+        self._trig_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._trig_objs)]
+        return self
+
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        return self
+
+    def stop(self):
+        [obj.stop() for obj in self._base_objs]
+        [obj.stop() for obj in self._trig_objs]
+        return self
+
+    def setLoop(self, x):
+        """
+        Replace the `loop` attribute.
+
+        Parameters:
+
+        x : boolean
+            new `loop` attribute.
+
+        """
+        self._loop = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setLoop(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = []
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    @property
+    def loop(self): 
+        """boolean. Looping mode.""" 
+        return self._loop
+    @loop.setter
+    def loop(self, x): self.setLoop(x)
+

@@ -1,69 +1,144 @@
+-------------------------------------------------------------------------------------
+
+2011-07-31 belangeo <belangeo@gmail.com>
+
+    * rev 702 - pyo 0.5.0 release.
+
+2011-07-31 belangeo <belangeo@gmail.com>
+
+    * Added new objects : NoteinRec and NoteinRead. Records and reads Notein automations.
+    - rev 701
+
+2011-08-30 belangeo <belangeo@gmail.com>
+
+    * Added new object : WinTable. Generates different kind of windowing functions. 
+    - rev 700
+
+2011-07-22 belangeo <belangeo@gmail.com>
+
+    * Added new function : reducePoints(), apply a Douglas–Peucker curve reduction algorithm. 
+      Added loadRecFile() method to table objects.
+    - rev 688
+
+2011-07-20 belangeo <belangeo@gmail.com>
+
+    * Added new objects : ControlRec and ControlRead. Records automations at user-defined sampling rate.
+    - rev 687
+
+2011-07-18 belangeo <belangeo@gmail.com>
+
+    * Added C impementation of the Looper object.
+    - rev 682
+
+2011-07-07 belangeo <belangeo@gmail.com>
+
+    * Added new arithmetic object: Round.
+    - rev 675
+
+2011-07-06 belangeo <belangeo@gmail.com>
+
+    * Added new arithmetic object: Floor.
+    - rev 674
+
+2011-07-03 belangeo <belangeo@gmail.com>
+
+    * Added new objects: OscDataSend and OscDataReceive.
+    - rev 668
+
+2011-06-15 belangeo <belangeo@gmail.com>
+
+    * Added 'feedback' attribute to NewTable object.
+    - rev 659
+
+2011-06-14 belangeo <belangeo@gmail.com>
+
+    * New object : TrigTableRec.
+    - rev 658
+
+2011-06-02 belangeo <belangeo@gmail.com>
+
+    * Added cartesian to polar and polar to cartesian conversions.
+    - rev 655
+
+2011-06-01 belangeo <belangeo@gmail.com>
+
+    * Protected (self->steps == 0) in line generation to avoid division by zero.
+    - rev 654
+
+2011-05-31 belangeo <belangeo@gmail.com>
+
+    * Added Fast Fourier Transform (FFT, IFFT).
+    - rev 652
+
+-------------------------------------------------------------------------------------
+
 2011-05-18 belangeo <belangeo@gmail.com>
 
     * Added getVersion() function and upgrade version number to '0.4.1'.
-	- rev 645		
+    - rev 645
 
 2011-05-18 belangeo <belangeo@gmail.com>
 
     * Improved soundfile player family (SfPlayer, SfMarkerShuffler and SfMarkerLooper).
-	- rev 644		
+    - rev 644
 
 2011-05-13 belangeo <belangeo@gmail.com>
 
     * New object : FourBand (linear phase spectrum splitter).
-	- rev 640		
+    - rev 640
 
 2011-05-11 belangeo <belangeo@gmail.com>
 
     * New object : ParaTable (parabola window function).
-	- rev 637		
+    - rev 637
 
 2011-05-11 belangeo <belangeo@gmail.com>
 
     * Added 'outputAmp' argument to Compress and Gate. Useful to link several channels.
-	- rev 636
+    - rev 636
 
 2011-05-10 belangeo <belangeo@gmail.com>
 
     * New object: Gate (noise gate).
-	- rev 635		
+    - rev 635
 
 2011-05-10 belangeo <belangeo@gmail.com>
 
     * New object: Follower2 (different attack and release times).
-	- rev 634	
+    - rev 634
 
 2011-05-10 belangeo <belangeo@gmail.com>
 
     * Completely redesigned Follower.
-	- rev 633	
+    - rev 633
 
 2011-05-10 belangeo <belangeo@gmail.com>
 
     * Completely redesigned Compress.
-	- rev 632		
+    - rev 632
 
 2011-05-05 belangeo <belangeo@gmail.com>
 
     * SigTo can be used with PyoObject as input value.
-	- rev 631		
+    - rev 631
 
 2011-05-03 belangeo <belangeo@gmail.com>
- 
+
     * Port filter optimization.
-	- rev 630		
-	
-	
-2011-05-03 belangeo <belangeo@gmail.com>	
+    - rev 630
+
+
+2011-05-03 belangeo <belangeo@gmail.com>
 
     * Fixed glitches in objects using recursive delay lines.
-	- rev 629
+    - rev 629
 
-2011-05-02	belangeo <belangeo@gmail.com>
+2011-05-02  belangeo <belangeo@gmail.com>
 
-	* Fixed bug in Expseg and TrigExpseg "exp" argument initilization.		
-	- rev 624
+    * Fixed bug in Expseg and TrigExpseg "exp" argument initilization.
+    - rev 624
 
+-------------------------------------------------------------------------------------
 
 2011-02-29 belangeo <belangeo@gmail.com>
 
@@ -159,6 +234,8 @@
     * All trig signals can be treated as number, allowing arithmetic operations.
     - rev 547
 
+-------------------------------------------------------------------------------------
+
 2010-02-20 belangeo <belangeo@gmail.com>
 
     * rev 544 - pyo 0.03 release.
@@ -174,6 +251,8 @@
       control of the envelope's shape with a grapher window.
     - rev 532
 
+
+-------------------------------------------------------------------------------------
 
 2010-11-02 belangeo <belangeo@gmail.com>
 
@@ -205,9 +284,9 @@
 
 2010-10-04 mantaraya36 <mantaraya36@gmail.com>
            belangeo <belangeo@gmail.com>
-    
+
     * Added offline rendering.
-    - rev 452   
+    - rev 452
 
 2010-09-30 belangeo <belangeo@gmail.com>
 
@@ -219,13 +298,13 @@
 
     * Added new objet : Percent
     - rev 434
-    
+
 2010-09-21 belangeo <belangeo@gmail.com>
 
     * Added support for Coreaudio backend.
       Build with --use-coreaudio option.
     - rev 431
-    
+
 2010-09-17 mantaraya36 <mantaraya36@gmail.com>
 
     * Added support for Jack audio backend.
@@ -240,12 +319,14 @@
     - rev 417.
 
 2010-09-13 belangeo <belangeo@gmail.com>
-    
+
     * Added "dur" and "delay" arguments to play and out methods of PyoObject.
     - rev 413.
-    
+
+-------------------------------------------------------------------------------------
+
 2010-09-06 belangeo <belangeo@gmail.com>
 
     * rev 390 - pyo 0.01 release.
-    
-    
+
+

@@ -381,7 +381,6 @@ Snap_compute_next_data_frame(Snap *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -756,7 +755,6 @@ Interp_compute_next_data_frame(Interp *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -825,11 +823,11 @@ Interp_init(Interp *self, PyObject *args, PyObject *kwds)
     
     INIT_INPUT_STREAM
 
-    Py_XDECREF(self->input2); \
-    self->input2 = input2tmp; \
-    input2_streamtmp = PyObject_CallMethod((PyObject *)self->input2, "_getStream", NULL); \
-    Py_INCREF(input2_streamtmp); \
-    Py_XDECREF(self->input2_stream); \
+    Py_XDECREF(self->input2);
+    self->input2 = input2tmp;
+    input2_streamtmp = PyObject_CallMethod((PyObject *)self->input2, "_getStream", NULL);
+    Py_INCREF(input2_streamtmp);
+    Py_XDECREF(self->input2_stream);
     self->input2_stream = (Stream *)input2_streamtmp;
     
     if (interptmp) {
@@ -1139,7 +1137,6 @@ SampHold_compute_next_data_frame(SampHold *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -1534,7 +1531,6 @@ Compare_compute_next_data_frame(Compare *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -1966,7 +1962,6 @@ Between_compute_next_data_frame(Between *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -2343,7 +2338,6 @@ Denorm_compute_next_data_frame(Denorm *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int

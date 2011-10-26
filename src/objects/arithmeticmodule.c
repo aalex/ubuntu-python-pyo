@@ -100,7 +100,6 @@ M_Sin_compute_next_data_frame(M_Sin *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -378,7 +377,6 @@ M_Cos_compute_next_data_frame(M_Cos *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -656,7 +654,6 @@ M_Tan_compute_next_data_frame(M_Tan *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -939,7 +936,6 @@ M_Abs_compute_next_data_frame(M_Abs *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -1221,7 +1217,6 @@ M_Sqrt_compute_next_data_frame(M_Sqrt *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -1503,7 +1498,6 @@ M_Log_compute_next_data_frame(M_Log *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -1785,7 +1779,6 @@ M_Log10_compute_next_data_frame(M_Log10 *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -2067,7 +2060,6 @@ M_Log2_compute_next_data_frame(M_Log2 *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -2397,7 +2389,6 @@ M_Pow_compute_next_data_frame(M_Pow *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -2684,4 +2675,971 @@ PyTypeObject M_PowType = {
     (initproc)M_Pow_init,      /* tp_init */
     0,                         /* tp_alloc */
     M_Pow_new,                 /* tp_new */
+};
+
+/**************/
+/* M_Atan2 object */
+/**************/
+typedef struct {
+    pyo_audio_HEAD
+    PyObject *b;
+    Stream *b_stream;
+    PyObject *a;
+    Stream *a_stream;
+    int modebuffer[4];
+} M_Atan2;
+
+static void
+M_Atan2_readframes_ii(M_Atan2 *self) {
+    int i;
+    
+    MYFLT b = PyFloat_AS_DOUBLE(self->b);
+    MYFLT a = PyFloat_AS_DOUBLE(self->a);
+    
+    for (i=0; i<self->bufsize; i++) {
+        self->data[i] = MYATAN2(b, a);
+    }
+}
+
+static void
+M_Atan2_readframes_ai(M_Atan2 *self) {
+    int i;
+    
+    MYFLT *b = Stream_getData((Stream *)self->b_stream);
+    MYFLT a = PyFloat_AS_DOUBLE(self->a);
+    
+    for (i=0; i<self->bufsize; i++) {
+        self->data[i] = MYATAN2(b[i], a);
+    }
+}
+
+static void
+M_Atan2_readframes_ia(M_Atan2 *self) {
+    int i;
+    
+    MYFLT b = PyFloat_AS_DOUBLE(self->b);
+    MYFLT *a = Stream_getData((Stream *)self->a_stream);
+    
+    for (i=0; i<self->bufsize; i++) {
+        self->data[i] = MYATAN2(b, a[i]);
+    }
+}
+
+static void
+M_Atan2_readframes_aa(M_Atan2 *self) {
+    int i;
+    
+    MYFLT *b = Stream_getData((Stream *)self->b_stream);
+    MYFLT *a = Stream_getData((Stream *)self->a_stream);
+    
+    for (i=0; i<self->bufsize; i++) {
+        self->data[i] = MYATAN2(b[i], a[i]);
+    }
+}
+
+static void M_Atan2_postprocessing_ii(M_Atan2 *self) { POST_PROCESSING_II };
+static void M_Atan2_postprocessing_ai(M_Atan2 *self) { POST_PROCESSING_AI };
+static void M_Atan2_postprocessing_ia(M_Atan2 *self) { POST_PROCESSING_IA };
+static void M_Atan2_postprocessing_aa(M_Atan2 *self) { POST_PROCESSING_AA };
+static void M_Atan2_postprocessing_ireva(M_Atan2 *self) { POST_PROCESSING_IREVA };
+static void M_Atan2_postprocessing_areva(M_Atan2 *self) { POST_PROCESSING_AREVA };
+static void M_Atan2_postprocessing_revai(M_Atan2 *self) { POST_PROCESSING_REVAI };
+static void M_Atan2_postprocessing_revaa(M_Atan2 *self) { POST_PROCESSING_REVAA };
+static void M_Atan2_postprocessing_revareva(M_Atan2 *self) { POST_PROCESSING_REVAREVA };
+
+static void
+M_Atan2_setProcMode(M_Atan2 *self)
+{
+    int procmode, muladdmode;
+    procmode = self->modebuffer[2] + self->modebuffer[3] * 10;
+    muladdmode = self->modebuffer[0] + self->modebuffer[1] * 10;
+    
+	switch (procmode) {
+        case 0:        
+            self->proc_func_ptr = M_Atan2_readframes_ii;
+            break;
+        case 1:    
+            self->proc_func_ptr = M_Atan2_readframes_ai;
+            break;
+        case 10:        
+            self->proc_func_ptr = M_Atan2_readframes_ia;
+            break;
+        case 11:    
+            self->proc_func_ptr = M_Atan2_readframes_aa;
+            break;
+    } 
+	switch (muladdmode) {
+        case 0:        
+            self->muladd_func_ptr = M_Atan2_postprocessing_ii;
+            break;
+        case 1:    
+            self->muladd_func_ptr = M_Atan2_postprocessing_ai;
+            break;
+        case 2:    
+            self->muladd_func_ptr = M_Atan2_postprocessing_revai;
+            break;
+        case 10:        
+            self->muladd_func_ptr = M_Atan2_postprocessing_ia;
+            break;
+        case 11:    
+            self->muladd_func_ptr = M_Atan2_postprocessing_aa;
+            break;
+        case 12:    
+            self->muladd_func_ptr = M_Atan2_postprocessing_revaa;
+            break;
+        case 20:        
+            self->muladd_func_ptr = M_Atan2_postprocessing_ireva;
+            break;
+        case 21:    
+            self->muladd_func_ptr = M_Atan2_postprocessing_areva;
+            break;
+        case 22:    
+            self->muladd_func_ptr = M_Atan2_postprocessing_revareva;
+            break;
+    } 
+}
+
+static void
+M_Atan2_compute_next_data_frame(M_Atan2 *self)
+{
+    (*self->proc_func_ptr)(self); 
+    (*self->muladd_func_ptr)(self);
+}
+
+static int
+M_Atan2_traverse(M_Atan2 *self, visitproc visit, void *arg)
+{
+    pyo_VISIT
+    Py_VISIT(self->b);    
+    Py_VISIT(self->b_stream);    
+    Py_VISIT(self->a);    
+    Py_VISIT(self->a_stream);    
+    return 0;
+}
+
+static int 
+M_Atan2_clear(M_Atan2 *self)
+{
+    pyo_CLEAR
+    Py_CLEAR(self->b);    
+    Py_CLEAR(self->b_stream);    
+    Py_CLEAR(self->a);    
+    Py_CLEAR(self->a_stream);    
+    return 0;
+}
+
+static void
+M_Atan2_dealloc(M_Atan2* self)
+{
+    free(self->data);
+    M_Atan2_clear(self);
+    self->ob_type->tp_free((PyObject*)self);
+}
+
+static PyObject * M_Atan2_deleteStream(M_Atan2 *self) { DELETE_STREAM };
+
+static PyObject *
+M_Atan2_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    int i;
+    M_Atan2 *self;
+    self = (M_Atan2 *)type->tp_alloc(type, 0);
+    
+    self->a = PyFloat_FromDouble(1);
+    self->b = PyFloat_FromDouble(1);
+	self->modebuffer[0] = 0;
+	self->modebuffer[1] = 0;
+	self->modebuffer[2] = 0;
+	self->modebuffer[3] = 0;
+    
+    INIT_OBJECT_COMMON
+    Stream_setFunctionPtr(self->stream, M_Atan2_compute_next_data_frame);
+    self->mode_func_ptr = M_Atan2_setProcMode;
+    
+    return (PyObject *)self;
+}
+
+static int
+M_Atan2_init(M_Atan2 *self, PyObject *args, PyObject *kwds)
+{
+    PyObject *btmp=NULL, *atmp=NULL, *multmp=NULL, *addtmp=NULL;
+    
+    static char *kwlist[] = {"b", "a", "mul", "add", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "|OOOO", kwlist, &btmp, &atmp, &multmp, &addtmp))
+        return -1; 
+    
+    if (btmp) {
+        PyObject_CallMethod((PyObject *)self, "setB", "O", btmp);
+    }
+    
+    if (atmp) {
+        PyObject_CallMethod((PyObject *)self, "setA", "O", atmp);
+    }
+    
+    if (multmp) {
+        PyObject_CallMethod((PyObject *)self, "setMul", "O", multmp);
+    }
+    
+    if (addtmp) {
+        PyObject_CallMethod((PyObject *)self, "setAdd", "O", addtmp);
+    }
+    
+    Py_INCREF(self->stream);
+    PyObject_CallMethod(self->server, "addStream", "O", self->stream);
+    
+    (*self->mode_func_ptr)(self);
+        
+    Py_INCREF(self);
+    return 0;
+}
+
+static PyObject * M_Atan2_getServer(M_Atan2* self) { GET_SERVER };
+static PyObject * M_Atan2_getStream(M_Atan2* self) { GET_STREAM };
+static PyObject * M_Atan2_setMul(M_Atan2 *self, PyObject *arg) { SET_MUL };	
+static PyObject * M_Atan2_setAdd(M_Atan2 *self, PyObject *arg) { SET_ADD };	
+static PyObject * M_Atan2_setSub(M_Atan2 *self, PyObject *arg) { SET_SUB };	
+static PyObject * M_Atan2_setDiv(M_Atan2 *self, PyObject *arg) { SET_DIV };	
+
+static PyObject * M_Atan2_play(M_Atan2 *self, PyObject *args, PyObject *kwds) { PLAY };
+static PyObject * M_Atan2_out(M_Atan2 *self, PyObject *args, PyObject *kwds) { OUT };
+static PyObject * M_Atan2_stop(M_Atan2 *self) { STOP };
+
+static PyObject * M_Atan2_multiply(M_Atan2 *self, PyObject *arg) { MULTIPLY };
+static PyObject * M_Atan2_inplace_multiply(M_Atan2 *self, PyObject *arg) { INPLACE_MULTIPLY };
+static PyObject * M_Atan2_add(M_Atan2 *self, PyObject *arg) { ADD };
+static PyObject * M_Atan2_inplace_add(M_Atan2 *self, PyObject *arg) { INPLACE_ADD };
+static PyObject * M_Atan2_sub(M_Atan2 *self, PyObject *arg) { SUB };
+static PyObject * M_Atan2_inplace_sub(M_Atan2 *self, PyObject *arg) { INPLACE_SUB };
+static PyObject * M_Atan2_div(M_Atan2 *self, PyObject *arg) { DIV };
+static PyObject * M_Atan2_inplace_div(M_Atan2 *self, PyObject *arg) { INPLACE_DIV };
+
+static PyObject *
+M_Atan2_setB(M_Atan2 *self, PyObject *arg)
+{
+	PyObject *tmp, *streamtmp;
+	
+	if (arg == NULL) {
+		Py_INCREF(Py_None);
+		return Py_None;
+	}
+    
+	int isNumber = PyNumber_Check(arg);
+	
+	tmp = arg;
+	Py_INCREF(tmp);
+	Py_DECREF(self->b);
+	if (isNumber == 1) {
+		self->b = PyNumber_Float(tmp);
+        self->modebuffer[2] = 0;
+	}
+	else {
+		self->b = tmp;
+        streamtmp = PyObject_CallMethod((PyObject *)self->b, "_getStream", NULL);
+        Py_INCREF(streamtmp);
+        Py_XDECREF(self->b_stream);
+        self->b_stream = (Stream *)streamtmp;
+		self->modebuffer[2] = 1;
+	}
+    
+    (*self->mode_func_ptr)(self);
+    
+	Py_INCREF(Py_None);
+	return Py_None;
+}	
+
+static PyObject *
+M_Atan2_setA(M_Atan2 *self, PyObject *arg)
+{
+	PyObject *tmp, *streamtmp;
+	
+	if (arg == NULL) {
+		Py_INCREF(Py_None);
+		return Py_None;
+	}
+    
+	int isNumber = PyNumber_Check(arg);
+	
+	tmp = arg;
+	Py_INCREF(tmp);
+	Py_DECREF(self->a);
+	if (isNumber == 1) {
+		self->a = PyNumber_Float(tmp);
+        self->modebuffer[3] = 0;
+	}
+	else {
+		self->a = tmp;
+        streamtmp = PyObject_CallMethod((PyObject *)self->a, "_getStream", NULL);
+        Py_INCREF(streamtmp);
+        Py_XDECREF(self->a_stream);
+        self->a_stream = (Stream *)streamtmp;
+		self->modebuffer[3] = 1;
+	}
+    
+    (*self->mode_func_ptr)(self);
+    
+	Py_INCREF(Py_None);
+	return Py_None;
+}	
+
+static PyMemberDef M_Atan2_members[] = {
+    {"server", T_OBJECT_EX, offsetof(M_Atan2, server), 0, "Pyo server."},
+    {"stream", T_OBJECT_EX, offsetof(M_Atan2, stream), 0, "Stream object."},
+    {"b", T_OBJECT_EX, offsetof(M_Atan2, b), 0, "b composant."},
+    {"a", T_OBJECT_EX, offsetof(M_Atan2, a), 0, "a composant."},
+    {"mul", T_OBJECT_EX, offsetof(M_Atan2, mul), 0, "Mul factor."},
+    {"add", T_OBJECT_EX, offsetof(M_Atan2, add), 0, "Add factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyMethodDef M_Atan2_methods[] = {
+    {"getServer", (PyCFunction)M_Atan2_getServer, METH_NOARGS, "Returns server object."},
+    {"_getStream", (PyCFunction)M_Atan2_getStream, METH_NOARGS, "Returns stream object."},
+    {"deleteStream", (PyCFunction)M_Atan2_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
+    {"play", (PyCFunction)M_Atan2_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
+    {"out", (PyCFunction)M_Atan2_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
+    {"stop", (PyCFunction)M_Atan2_stop, METH_NOARGS, "Stops computing."},
+    {"setB", (PyCFunction)M_Atan2_setB, METH_O, "Sets b."},
+    {"setA", (PyCFunction)M_Atan2_setA, METH_O, "Sets a."},
+    {"setMul", (PyCFunction)M_Atan2_setMul, METH_O, "Sets mul factor."},
+    {"setAdd", (PyCFunction)M_Atan2_setAdd, METH_O, "Sets add factor."},
+    {"setSub", (PyCFunction)M_Atan2_setSub, METH_O, "Sets inverse add factor."},
+    {"setDiv", (PyCFunction)M_Atan2_setDiv, METH_O, "Sets inverse mul factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyNumberMethods M_Atan2_as_number = {
+    (binaryfunc)M_Atan2_add,                      /*nb_add*/
+    (binaryfunc)M_Atan2_sub,                 /*nb_subtract*/
+    (binaryfunc)M_Atan2_multiply,                 /*nb_multiply*/
+    (binaryfunc)M_Atan2_div,                   /*nb_divide*/
+    0,                /*nb_remainder*/
+    0,                   /*nb_divmod*/
+    0,                   /*nb_power*/
+    0,                  /*nb_neg*/
+    0,                /*nb_pos*/
+    0,                  /*(unaryfunc)array_abs,*/
+    0,                    /*nb_nonzero*/
+    0,                    /*nb_invert*/
+    0,               /*nb_lshift*/
+    0,              /*nb_rshift*/
+    0,              /*nb_and*/
+    0,              /*nb_xor*/
+    0,               /*nb_or*/
+    0,                                          /*nb_coerce*/
+    0,                       /*nb_int*/
+    0,                      /*nb_long*/
+    0,                     /*nb_float*/
+    0,                       /*nb_oct*/
+    0,                       /*nb_hex*/
+    (binaryfunc)M_Atan2_inplace_add,              /*inplace_add*/
+    (binaryfunc)M_Atan2_inplace_sub,         /*inplace_subtract*/
+    (binaryfunc)M_Atan2_inplace_multiply,         /*inplace_multiply*/
+    (binaryfunc)M_Atan2_inplace_div,           /*inplace_divide*/
+    0,        /*inplace_remainder*/
+    0,           /*inplace_power*/
+    0,       /*inplace_lshift*/
+    0,      /*inplace_rshift*/
+    0,      /*inplace_and*/
+    0,      /*inplace_xor*/
+    0,       /*inplace_or*/
+    0,             /*nb_floor_divide*/
+    0,              /*nb_true_divide*/
+    0,     /*nb_inplace_floor_divide*/
+    0,      /*nb_inplace_true_divide*/
+    0,                     /* nb_index */
+};
+
+PyTypeObject M_Atan2Type = {
+    PyObject_HEAD_INIT(NULL)
+    0,                         /*ob_size*/
+    "_pyo.M_Atan2_base",         /*tp_name*/
+    sizeof(M_Atan2),         /*tp_basicsize*/
+    0,                         /*tp_itemsize*/
+    (destructor)M_Atan2_dealloc, /*tp_dealloc*/
+    0,                         /*tp_print*/
+    0,                         /*tp_getattr*/
+    0,                         /*tp_setattr*/
+    0,                         /*tp_compare*/
+    0,                         /*tp_repr*/
+    &M_Atan2_as_number,             /*tp_as_number*/
+    0,                         /*tp_as_sequence*/
+    0,                         /*tp_as_mapping*/
+    0,                         /*tp_hash */
+    0,                         /*tp_call*/
+    0,                         /*tp_str*/
+    0,                         /*tp_getattro*/
+    0,                         /*tp_setattro*/
+    0,                         /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES, /*tp_flags*/
+    "M_Atan2 objects. Atan2er function.",           /* tp_doc */
+    (traverseproc)M_Atan2_traverse,   /* tp_traverse */
+    (inquiry)M_Atan2_clear,           /* tp_clear */
+    0,		               /* tp_richcompare */
+    0,		               /* tp_weaklistoffset */
+    0,		               /* tp_iter */
+    0,		               /* tp_iternext */
+    M_Atan2_methods,             /* tp_methods */
+    M_Atan2_members,             /* tp_members */
+    0,                      /* tp_getset */
+    0,                         /* tp_base */
+    0,                         /* tp_dict */
+    0,                         /* tp_descr_get */
+    0,                         /* tp_descr_set */
+    0,                         /* tp_dictoffset */
+    (initproc)M_Atan2_init,      /* tp_init */
+    0,                         /* tp_alloc */
+    M_Atan2_new,                 /* tp_new */
+};
+
+/************/
+/* M_Floor */
+/************/
+typedef struct {
+    pyo_audio_HEAD
+    PyObject *input;
+    Stream *input_stream;
+    int modebuffer[2]; // need at least 2 slots for mul & add
+} M_Floor;
+
+static void
+M_Floor_process(M_Floor *self) {
+    int i;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    
+    for (i=0; i<self->bufsize; i++) {
+        self->data[i] = MYFLOOR(in[i]);
+    }
+}
+
+static void M_Floor_postprocessing_ii(M_Floor *self) { POST_PROCESSING_II };
+static void M_Floor_postprocessing_ai(M_Floor *self) { POST_PROCESSING_AI };
+static void M_Floor_postprocessing_ia(M_Floor *self) { POST_PROCESSING_IA };
+static void M_Floor_postprocessing_aa(M_Floor *self) { POST_PROCESSING_AA };
+static void M_Floor_postprocessing_ireva(M_Floor *self) { POST_PROCESSING_IREVA };
+static void M_Floor_postprocessing_areva(M_Floor *self) { POST_PROCESSING_AREVA };
+static void M_Floor_postprocessing_revai(M_Floor *self) { POST_PROCESSING_REVAI };
+static void M_Floor_postprocessing_revaa(M_Floor *self) { POST_PROCESSING_REVAA };
+static void M_Floor_postprocessing_revareva(M_Floor *self) { POST_PROCESSING_REVAREVA };
+
+static void
+M_Floor_setProcMode(M_Floor *self)
+{
+    int muladdmode;
+    muladdmode = self->modebuffer[0] + self->modebuffer[1] * 10;
+    
+    self->proc_func_ptr = M_Floor_process;
+    
+	switch (muladdmode) {
+        case 0:        
+            self->muladd_func_ptr = M_Floor_postprocessing_ii;
+            break;
+        case 1:    
+            self->muladd_func_ptr = M_Floor_postprocessing_ai;
+            break;
+        case 2:    
+            self->muladd_func_ptr = M_Floor_postprocessing_revai;
+            break;
+        case 10:        
+            self->muladd_func_ptr = M_Floor_postprocessing_ia;
+            break;
+        case 11:    
+            self->muladd_func_ptr = M_Floor_postprocessing_aa;
+            break;
+        case 12:    
+            self->muladd_func_ptr = M_Floor_postprocessing_revaa;
+            break;
+        case 20:        
+            self->muladd_func_ptr = M_Floor_postprocessing_ireva;
+            break;
+        case 21:    
+            self->muladd_func_ptr = M_Floor_postprocessing_areva;
+            break;
+        case 22:    
+            self->muladd_func_ptr = M_Floor_postprocessing_revareva;
+            break;
+    }   
+}
+
+static void
+M_Floor_compute_next_data_frame(M_Floor *self)
+{
+    (*self->proc_func_ptr)(self); 
+    (*self->muladd_func_ptr)(self);
+}
+
+static int
+M_Floor_traverse(M_Floor *self, visitproc visit, void *arg)
+{
+    pyo_VISIT
+    Py_VISIT(self->input);
+    Py_VISIT(self->input_stream);
+    return 0;
+}
+
+static int 
+M_Floor_clear(M_Floor *self)
+{
+    pyo_CLEAR
+    Py_CLEAR(self->input);
+    Py_CLEAR(self->input_stream);
+    return 0;
+}
+
+static void
+M_Floor_dealloc(M_Floor* self)
+{
+    free(self->data);
+    M_Floor_clear(self);
+    self->ob_type->tp_free((PyObject*)self);
+}
+
+static PyObject * M_Floor_deleteStream(M_Floor *self) { DELETE_STREAM };
+
+static PyObject *
+M_Floor_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    int i;
+    M_Floor *self;
+    self = (M_Floor *)type->tp_alloc(type, 0);
+    
+	self->modebuffer[0] = 0;
+	self->modebuffer[1] = 0;
+    
+    INIT_OBJECT_COMMON
+    Stream_setFunctionPtr(self->stream, M_Floor_compute_next_data_frame);
+    self->mode_func_ptr = M_Floor_setProcMode;
+    return (PyObject *)self;
+}
+
+static int
+M_Floor_init(M_Floor *self, PyObject *args, PyObject *kwds)
+{
+    PyObject *inputtmp, *input_streamtmp, *multmp=NULL, *addtmp=NULL;
+    
+    static char *kwlist[] = {"input", "mul", "add", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O|OO", kwlist, &inputtmp, &multmp, &addtmp))
+        return -1; 
+    
+    INIT_INPUT_STREAM
+    
+    if (multmp) {
+        PyObject_CallMethod((PyObject *)self, "setMul", "O", multmp);
+    }
+    
+    if (addtmp) {
+        PyObject_CallMethod((PyObject *)self, "setAdd", "O", addtmp);
+    }
+    
+    Py_INCREF(self->stream);
+    PyObject_CallMethod(self->server, "addStream", "O", self->stream);
+    
+    (*self->mode_func_ptr)(self);
+    
+    Py_INCREF(self);
+    return 0;
+}
+
+static PyObject * M_Floor_getServer(M_Floor* self) { GET_SERVER };
+static PyObject * M_Floor_getStream(M_Floor* self) { GET_STREAM };
+static PyObject * M_Floor_setMul(M_Floor *self, PyObject *arg) { SET_MUL };	
+static PyObject * M_Floor_setAdd(M_Floor *self, PyObject *arg) { SET_ADD };	
+static PyObject * M_Floor_setSub(M_Floor *self, PyObject *arg) { SET_SUB };	
+static PyObject * M_Floor_setDiv(M_Floor *self, PyObject *arg) { SET_DIV };	
+
+static PyObject * M_Floor_play(M_Floor *self, PyObject *args, PyObject *kwds) { PLAY };
+static PyObject * M_Floor_out(M_Floor *self, PyObject *args, PyObject *kwds) { OUT };
+static PyObject * M_Floor_stop(M_Floor *self) { STOP };
+
+static PyObject * M_Floor_multiply(M_Floor *self, PyObject *arg) { MULTIPLY };
+static PyObject * M_Floor_inplace_multiply(M_Floor *self, PyObject *arg) { INPLACE_MULTIPLY };
+static PyObject * M_Floor_add(M_Floor *self, PyObject *arg) { ADD };
+static PyObject * M_Floor_inplace_add(M_Floor *self, PyObject *arg) { INPLACE_ADD };
+static PyObject * M_Floor_sub(M_Floor *self, PyObject *arg) { SUB };
+static PyObject * M_Floor_inplace_sub(M_Floor *self, PyObject *arg) { INPLACE_SUB };
+static PyObject * M_Floor_div(M_Floor *self, PyObject *arg) { DIV };
+static PyObject * M_Floor_inplace_div(M_Floor *self, PyObject *arg) { INPLACE_DIV };
+
+static PyMemberDef M_Floor_members[] = {
+    {"server", T_OBJECT_EX, offsetof(M_Floor, server), 0, "Pyo server."},
+    {"stream", T_OBJECT_EX, offsetof(M_Floor, stream), 0, "Stream object."},
+    {"input", T_OBJECT_EX, offsetof(M_Floor, input), 0, "Input sound object."},
+    {"mul", T_OBJECT_EX, offsetof(M_Floor, mul), 0, "Mul factor."},
+    {"add", T_OBJECT_EX, offsetof(M_Floor, add), 0, "Add factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyMethodDef M_Floor_methods[] = {
+    {"getServer", (PyCFunction)M_Floor_getServer, METH_NOARGS, "Returns server object."},
+    {"_getStream", (PyCFunction)M_Floor_getStream, METH_NOARGS, "Returns stream object."},
+    {"deleteStream", (PyCFunction)M_Floor_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
+    {"play", (PyCFunction)M_Floor_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
+    {"stop", (PyCFunction)M_Floor_stop, METH_NOARGS, "Stops computing."},
+    {"out", (PyCFunction)M_Floor_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
+    {"setMul", (PyCFunction)M_Floor_setMul, METH_O, "Sets oscillator mul factor."},
+    {"setAdd", (PyCFunction)M_Floor_setAdd, METH_O, "Sets oscillator add factor."},
+    {"setSub", (PyCFunction)M_Floor_setSub, METH_O, "Sets inverse add factor."},
+    {"setDiv", (PyCFunction)M_Floor_setDiv, METH_O, "Sets inverse mul factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyNumberMethods M_Floor_as_number = {
+    (binaryfunc)M_Floor_add,                         /*nb_add*/
+    (binaryfunc)M_Floor_sub,                         /*nb_subtract*/
+    (binaryfunc)M_Floor_multiply,                    /*nb_multiply*/
+    (binaryfunc)M_Floor_div,                                              /*nb_divide*/
+    0,                                              /*nb_remainder*/
+    0,                                              /*nb_divmod*/
+    0,                                              /*nb_power*/
+    0,                                              /*nb_neg*/
+    0,                                              /*nb_pos*/
+    0,                                              /*(unaryfunc)array_abs,*/
+    0,                                              /*nb_nonzero*/
+    0,                                              /*nb_invert*/
+    0,                                              /*nb_lshift*/
+    0,                                              /*nb_rshift*/
+    0,                                              /*nb_and*/
+    0,                                              /*nb_xor*/
+    0,                                              /*nb_or*/
+    0,                                              /*nb_coerce*/
+    0,                                              /*nb_int*/
+    0,                                              /*nb_long*/
+    0,                                              /*nb_float*/
+    0,                                              /*nb_oct*/
+    0,                                              /*nb_hex*/
+    (binaryfunc)M_Floor_inplace_add,                 /*inplace_add*/
+    (binaryfunc)M_Floor_inplace_sub,                 /*inplace_subtract*/
+    (binaryfunc)M_Floor_inplace_multiply,            /*inplace_multiply*/
+    (binaryfunc)M_Floor_inplace_div,                                              /*inplace_divide*/
+    0,                                              /*inplace_remainder*/
+    0,                                              /*inplace_power*/
+    0,                                              /*inplace_lshift*/
+    0,                                              /*inplace_rshift*/
+    0,                                              /*inplace_and*/
+    0,                                              /*inplace_xor*/
+    0,                                              /*inplace_or*/
+    0,                                              /*nb_floor_divide*/
+    0,                                              /*nb_true_divide*/
+    0,                                              /*nb_inplace_floor_divide*/
+    0,                                              /*nb_inplace_true_divide*/
+    0,                                              /* nb_index */
+};
+
+PyTypeObject M_FloorType = {
+    PyObject_HEAD_INIT(NULL)
+    0,                                              /*ob_size*/
+    "_pyo.M_Floor_base",                                   /*tp_name*/
+    sizeof(M_Floor),                                 /*tp_basicsize*/
+    0,                                              /*tp_itemsize*/
+    (destructor)M_Floor_dealloc,                     /*tp_dealloc*/
+    0,                                              /*tp_print*/
+    0,                                              /*tp_getattr*/
+    0,                                              /*tp_setattr*/
+    0,                                              /*tp_compare*/
+    0,                                              /*tp_repr*/
+    &M_Floor_as_number,                              /*tp_as_number*/
+    0,                                              /*tp_as_sequence*/
+    0,                                              /*tp_as_mapping*/
+    0,                                              /*tp_hash */
+    0,                                              /*tp_call*/
+    0,                                              /*tp_str*/
+    0,                                              /*tp_getattro*/
+    0,                                              /*tp_setattro*/
+    0,                                              /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES, /*tp_flags*/
+    "M_Floor objects. Performs sqrt function on audio samples.",           /* tp_doc */
+    (traverseproc)M_Floor_traverse,                  /* tp_traverse */
+    (inquiry)M_Floor_clear,                          /* tp_clear */
+    0,                                              /* tp_richcompare */
+    0,                                              /* tp_weaklistoffset */
+    0,                                              /* tp_iter */
+    0,                                              /* tp_iternext */
+    M_Floor_methods,                                 /* tp_methods */
+    M_Floor_members,                                 /* tp_members */
+    0,                                              /* tp_getset */
+    0,                                              /* tp_base */
+    0,                                              /* tp_dict */
+    0,                                              /* tp_descr_get */
+    0,                                              /* tp_descr_set */
+    0,                                              /* tp_dictoffset */
+    (initproc)M_Floor_init,                          /* tp_init */
+    0,                                              /* tp_alloc */
+    M_Floor_new,                                     /* tp_new */
+};
+
+/************/
+/* M_Round */
+/************/
+typedef struct {
+    pyo_audio_HEAD
+    PyObject *input;
+    Stream *input_stream;
+    int modebuffer[2]; // need at least 2 slots for mul & add
+} M_Round;
+
+static void
+M_Round_process(M_Round *self) {
+    int i;
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    
+    for (i=0; i<self->bufsize; i++) {
+        self->data[i] = MYROUND(in[i]);
+    }
+}
+
+static void M_Round_postprocessing_ii(M_Round *self) { POST_PROCESSING_II };
+static void M_Round_postprocessing_ai(M_Round *self) { POST_PROCESSING_AI };
+static void M_Round_postprocessing_ia(M_Round *self) { POST_PROCESSING_IA };
+static void M_Round_postprocessing_aa(M_Round *self) { POST_PROCESSING_AA };
+static void M_Round_postprocessing_ireva(M_Round *self) { POST_PROCESSING_IREVA };
+static void M_Round_postprocessing_areva(M_Round *self) { POST_PROCESSING_AREVA };
+static void M_Round_postprocessing_revai(M_Round *self) { POST_PROCESSING_REVAI };
+static void M_Round_postprocessing_revaa(M_Round *self) { POST_PROCESSING_REVAA };
+static void M_Round_postprocessing_revareva(M_Round *self) { POST_PROCESSING_REVAREVA };
+
+static void
+M_Round_setProcMode(M_Round *self)
+{
+    int muladdmode;
+    muladdmode = self->modebuffer[0] + self->modebuffer[1] * 10;
+    
+    self->proc_func_ptr = M_Round_process;
+    
+	switch (muladdmode) {
+        case 0:        
+            self->muladd_func_ptr = M_Round_postprocessing_ii;
+            break;
+        case 1:    
+            self->muladd_func_ptr = M_Round_postprocessing_ai;
+            break;
+        case 2:    
+            self->muladd_func_ptr = M_Round_postprocessing_revai;
+            break;
+        case 10:        
+            self->muladd_func_ptr = M_Round_postprocessing_ia;
+            break;
+        case 11:    
+            self->muladd_func_ptr = M_Round_postprocessing_aa;
+            break;
+        case 12:    
+            self->muladd_func_ptr = M_Round_postprocessing_revaa;
+            break;
+        case 20:        
+            self->muladd_func_ptr = M_Round_postprocessing_ireva;
+            break;
+        case 21:    
+            self->muladd_func_ptr = M_Round_postprocessing_areva;
+            break;
+        case 22:    
+            self->muladd_func_ptr = M_Round_postprocessing_revareva;
+            break;
+    }   
+}
+
+static void
+M_Round_compute_next_data_frame(M_Round *self)
+{
+    (*self->proc_func_ptr)(self); 
+    (*self->muladd_func_ptr)(self);
+}
+
+static int
+M_Round_traverse(M_Round *self, visitproc visit, void *arg)
+{
+    pyo_VISIT
+    Py_VISIT(self->input);
+    Py_VISIT(self->input_stream);
+    return 0;
+}
+
+static int 
+M_Round_clear(M_Round *self)
+{
+    pyo_CLEAR
+    Py_CLEAR(self->input);
+    Py_CLEAR(self->input_stream);
+    return 0;
+}
+
+static void
+M_Round_dealloc(M_Round* self)
+{
+    free(self->data);
+    M_Round_clear(self);
+    self->ob_type->tp_free((PyObject*)self);
+}
+
+static PyObject * M_Round_deleteStream(M_Round *self) { DELETE_STREAM };
+
+static PyObject *
+M_Round_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    int i;
+    M_Round *self;
+    self = (M_Round *)type->tp_alloc(type, 0);
+    
+	self->modebuffer[0] = 0;
+	self->modebuffer[1] = 0;
+    
+    INIT_OBJECT_COMMON
+    Stream_setFunctionPtr(self->stream, M_Round_compute_next_data_frame);
+    self->mode_func_ptr = M_Round_setProcMode;
+    return (PyObject *)self;
+}
+
+static int
+M_Round_init(M_Round *self, PyObject *args, PyObject *kwds)
+{
+    PyObject *inputtmp, *input_streamtmp, *multmp=NULL, *addtmp=NULL;
+    
+    static char *kwlist[] = {"input", "mul", "add", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O|OO", kwlist, &inputtmp, &multmp, &addtmp))
+        return -1; 
+    
+    INIT_INPUT_STREAM
+    
+    if (multmp) {
+        PyObject_CallMethod((PyObject *)self, "setMul", "O", multmp);
+    }
+    
+    if (addtmp) {
+        PyObject_CallMethod((PyObject *)self, "setAdd", "O", addtmp);
+    }
+    
+    Py_INCREF(self->stream);
+    PyObject_CallMethod(self->server, "addStream", "O", self->stream);
+    
+    (*self->mode_func_ptr)(self);
+    
+    Py_INCREF(self);
+    return 0;
+}
+
+static PyObject * M_Round_getServer(M_Round* self) { GET_SERVER };
+static PyObject * M_Round_getStream(M_Round* self) { GET_STREAM };
+static PyObject * M_Round_setMul(M_Round *self, PyObject *arg) { SET_MUL };	
+static PyObject * M_Round_setAdd(M_Round *self, PyObject *arg) { SET_ADD };	
+static PyObject * M_Round_setSub(M_Round *self, PyObject *arg) { SET_SUB };	
+static PyObject * M_Round_setDiv(M_Round *self, PyObject *arg) { SET_DIV };	
+
+static PyObject * M_Round_play(M_Round *self, PyObject *args, PyObject *kwds) { PLAY };
+static PyObject * M_Round_out(M_Round *self, PyObject *args, PyObject *kwds) { OUT };
+static PyObject * M_Round_stop(M_Round *self) { STOP };
+
+static PyObject * M_Round_multiply(M_Round *self, PyObject *arg) { MULTIPLY };
+static PyObject * M_Round_inplace_multiply(M_Round *self, PyObject *arg) { INPLACE_MULTIPLY };
+static PyObject * M_Round_add(M_Round *self, PyObject *arg) { ADD };
+static PyObject * M_Round_inplace_add(M_Round *self, PyObject *arg) { INPLACE_ADD };
+static PyObject * M_Round_sub(M_Round *self, PyObject *arg) { SUB };
+static PyObject * M_Round_inplace_sub(M_Round *self, PyObject *arg) { INPLACE_SUB };
+static PyObject * M_Round_div(M_Round *self, PyObject *arg) { DIV };
+static PyObject * M_Round_inplace_div(M_Round *self, PyObject *arg) { INPLACE_DIV };
+
+static PyMemberDef M_Round_members[] = {
+    {"server", T_OBJECT_EX, offsetof(M_Round, server), 0, "Pyo server."},
+    {"stream", T_OBJECT_EX, offsetof(M_Round, stream), 0, "Stream object."},
+    {"input", T_OBJECT_EX, offsetof(M_Round, input), 0, "Input sound object."},
+    {"mul", T_OBJECT_EX, offsetof(M_Round, mul), 0, "Mul factor."},
+    {"add", T_OBJECT_EX, offsetof(M_Round, add), 0, "Add factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyMethodDef M_Round_methods[] = {
+    {"getServer", (PyCFunction)M_Round_getServer, METH_NOARGS, "Returns server object."},
+    {"_getStream", (PyCFunction)M_Round_getStream, METH_NOARGS, "Returns stream object."},
+    {"deleteStream", (PyCFunction)M_Round_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
+    {"play", (PyCFunction)M_Round_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
+    {"stop", (PyCFunction)M_Round_stop, METH_NOARGS, "Stops computing."},
+    {"out", (PyCFunction)M_Round_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
+    {"setMul", (PyCFunction)M_Round_setMul, METH_O, "Sets oscillator mul factor."},
+    {"setAdd", (PyCFunction)M_Round_setAdd, METH_O, "Sets oscillator add factor."},
+    {"setSub", (PyCFunction)M_Round_setSub, METH_O, "Sets inverse add factor."},
+    {"setDiv", (PyCFunction)M_Round_setDiv, METH_O, "Sets inverse mul factor."},
+    {NULL}  /* Sentinel */
+};
+
+static PyNumberMethods M_Round_as_number = {
+    (binaryfunc)M_Round_add,                         /*nb_add*/
+    (binaryfunc)M_Round_sub,                         /*nb_subtract*/
+    (binaryfunc)M_Round_multiply,                    /*nb_multiply*/
+    (binaryfunc)M_Round_div,                                              /*nb_divide*/
+    0,                                              /*nb_remainder*/
+    0,                                              /*nb_divmod*/
+    0,                                              /*nb_power*/
+    0,                                              /*nb_neg*/
+    0,                                              /*nb_pos*/
+    0,                                              /*(unaryfunc)array_abs,*/
+    0,                                              /*nb_nonzero*/
+    0,                                              /*nb_invert*/
+    0,                                              /*nb_lshift*/
+    0,                                              /*nb_rshift*/
+    0,                                              /*nb_and*/
+    0,                                              /*nb_xor*/
+    0,                                              /*nb_or*/
+    0,                                              /*nb_coerce*/
+    0,                                              /*nb_int*/
+    0,                                              /*nb_long*/
+    0,                                              /*nb_float*/
+    0,                                              /*nb_oct*/
+    0,                                              /*nb_hex*/
+    (binaryfunc)M_Round_inplace_add,                 /*inplace_add*/
+    (binaryfunc)M_Round_inplace_sub,                 /*inplace_subtract*/
+    (binaryfunc)M_Round_inplace_multiply,            /*inplace_multiply*/
+    (binaryfunc)M_Round_inplace_div,                                              /*inplace_divide*/
+    0,                                              /*inplace_remainder*/
+    0,                                              /*inplace_power*/
+    0,                                              /*inplace_lshift*/
+    0,                                              /*inplace_rshift*/
+    0,                                              /*inplace_and*/
+    0,                                              /*inplace_xor*/
+    0,                                              /*inplace_or*/
+    0,                                              /*nb_floor_divide*/
+    0,                                              /*nb_true_divide*/
+    0,                                              /*nb_inplace_floor_divide*/
+    0,                                              /*nb_inplace_true_divide*/
+    0,                                              /* nb_index */
+};
+
+PyTypeObject M_RoundType = {
+    PyObject_HEAD_INIT(NULL)
+    0,                                              /*ob_size*/
+    "_pyo.M_Round_base",                                   /*tp_name*/
+    sizeof(M_Round),                                 /*tp_basicsize*/
+    0,                                              /*tp_itemsize*/
+    (destructor)M_Round_dealloc,                     /*tp_dealloc*/
+    0,                                              /*tp_print*/
+    0,                                              /*tp_getattr*/
+    0,                                              /*tp_setattr*/
+    0,                                              /*tp_compare*/
+    0,                                              /*tp_repr*/
+    &M_Round_as_number,                              /*tp_as_number*/
+    0,                                              /*tp_as_sequence*/
+    0,                                              /*tp_as_mapping*/
+    0,                                              /*tp_hash */
+    0,                                              /*tp_call*/
+    0,                                              /*tp_str*/
+    0,                                              /*tp_getattro*/
+    0,                                              /*tp_setattro*/
+    0,                                              /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES, /*tp_flags*/
+    "M_Round objects. Performs sqrt function on audio samples.",           /* tp_doc */
+    (traverseproc)M_Round_traverse,                  /* tp_traverse */
+    (inquiry)M_Round_clear,                          /* tp_clear */
+    0,                                              /* tp_richcompare */
+    0,                                              /* tp_weaklistoffset */
+    0,                                              /* tp_iter */
+    0,                                              /* tp_iternext */
+    M_Round_methods,                                 /* tp_methods */
+    M_Round_members,                                 /* tp_members */
+    0,                                              /* tp_getset */
+    0,                                              /* tp_base */
+    0,                                              /* tp_dict */
+    0,                                              /* tp_descr_get */
+    0,                                              /* tp_descr_set */
+    0,                                              /* tp_dictoffset */
+    (initproc)M_Round_init,                          /* tp_init */
+    0,                                              /* tp_alloc */
+    M_Round_new,                                     /* tp_new */
 };

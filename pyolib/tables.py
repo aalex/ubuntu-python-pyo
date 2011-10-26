@@ -453,6 +453,99 @@ class HannTable(PyoTableObject):
     @size.setter
     def size(self, x): self.setSize(x)
 
+class WinTable(PyoTableObject):
+    """
+    Generates different kind of windowing functions. 
+    
+    Parent class: PyoTableObject
+    
+    Parameters:
+    
+    type : int, optional
+        Windowing function. Defaults to 2.
+        Possible choices are:
+            0 : Rectangular (no window)
+            1 : Hamming
+            2 : Hanning
+            3 : Bartlett (triangular)
+            4 : Blackman 3-term
+            5 : Blackman-Harris 4-term
+            6 : Blackman-Harris 7-term
+            7 : Tuckey (alpha = 0.66)
+            8 : Sine (half-sine window)
+    size : int, optional
+        Table size in samples. Defaults to 8192.
+        
+    Methods:
+    
+    setType(x) : Sets the windowing function.
+    setSize(size) : Change the size of the table. This will redraw the envelope.
+
+    Attributes:
+   
+    type : int
+        Windowing function.
+    size : int
+        Table size in samples.
+
+    Examples:
+    
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> # Triangular envelope
+    >>> t = WinTable(3)
+    >>> a = Osc(table=t, freq=2, mul=.5)
+    >>> b = Sine(freq=500, mul=a).out()
+
+    """
+    def __init__(self, type=2, size=8192):
+        self._type = type
+        self._size = size
+        self._base_objs = [WinTable_base(type, size)]
+
+    def __dir__(self):
+        return ['type', 'size']
+
+    def setType(self, type):
+        """
+        Sets the windowing function.
+
+        Parameters:
+
+        type : int {0 -> 8}
+        Windowing function.
+        """
+        self._type = type
+        [obj.setType(type) for obj in self._base_objs]
+
+
+    def setSize(self, size):
+        """
+        Change the size of the table. This will redraw the envelope.
+        
+        Parameters:
+        
+        size : int
+            New table size in samples.
+        
+        """
+        self._size = size
+        [obj.setSize(size) for obj in self._base_objs]
+
+    @property
+    def type(self): 
+        """int. Windowing function."""
+        return self._type
+    @type.setter
+    def type(self, x): self.setType(x)
+
+    @property
+    def size(self): 
+        """int. Table size in samples."""
+        return self._size
+    @size.setter
+    def size(self, x): self.setSize(x)
+
 class ParaTable(PyoTableObject):
     """
     Generates parabola window function. 
@@ -533,6 +626,7 @@ class LinTable(PyoTableObject):
     
     setSize(size) : Change the size of the table and rescale the envelope.
     replace(list) : Draw a new envelope according to the `list` parameter.
+    loadRecFile(filename, tolerance) : Import an automation recording file.
     graph(yrange, title, wxnoserver) : Opens a grapher window to control 
         the shape of the envelope.
 
@@ -588,9 +682,42 @@ class LinTable(PyoTableObject):
             List of tuples indicating location and value of each points 
             in the table. Location must be integer.
 
-        """      
+        """ 
         self._list = list
         [obj.replace(list) for obj in self._base_objs]
+
+    def loadRecFile(self, filename, tolerance=0.02):
+        """
+        Import an automation recording file in the table.
+        
+        loadRecFile takes a recording file, usually from a ControlRec object,
+        as `filename` parameter, applies a filtering pre-processing to eliminate
+        redundancies and loads the result in the table as a list of points. 
+        Filtering process can be controled with the `tolerance` parameter. 
+        
+        Parameters:
+        
+        filename : string
+            Full path of an automation recording file.
+        tolerance : float, optional
+            Tolerance of the filter. A higher value will eliminate more points.
+            Defaults to 0.02.
+
+        """
+        _path, _name = os.path.split(filename)
+        # files = sorted([f for f in os.listdir(_path) if _name+"_" in f])
+        # if _name not in files: files.append(_name)
+        files = [filename]
+        for i, obj in enumerate(self._base_objs):
+            p = os.path.join(_path, wrap(files,i))
+            f = open(p, "r")
+            values = [(float(l.split()[0]), float(l.split()[1])) for l in f.readlines()]
+            scl = self._size / values[-1][0]
+            values = [(int(v[0]*scl), v[1]) for v in values]
+            f.close()
+            values = reducePoints(values, tolerance=tolerance)
+            self._list = values
+            obj.replace(values)
 
     def getPoints(self):
         return self._base_objs[0].getPoints()
@@ -656,6 +783,7 @@ class CosTable(PyoTableObject):
     
     setSize(size) : Change the size of the table and rescale the envelope.
     replace(list) : Draw a new envelope according to the `list` parameter.
+    loadRecFile(filename, tolerance) : Import an automation recording file.
     graph(yrange, title, wxnoserver) : Opens a grapher window to control 
         the shape of the envelope.
 
@@ -714,6 +842,39 @@ class CosTable(PyoTableObject):
         """      
         self._list = list
         [obj.replace(list) for obj in self._base_objs]
+
+    def loadRecFile(self, filename, tolerance=0.02):
+        """
+        Import an automation recording file in the table.
+
+        loadRecFile takes a recording file, usually from a ControlRec object,
+        as `filename` parameter, applies a filtering pre-processing to eliminate
+        redundancies and loads the result in the table as a list of points. 
+        Filtering process can be controled with the `tolerance` parameter. 
+
+        Parameters:
+
+        filename : string
+            Full path of an automation recording file.
+        tolerance : float, optional
+            Tolerance of the filter. A higher value will eliminate more points.
+            Defaults to 0.02.
+
+        """
+        _path, _name = os.path.split(filename)
+        # files = sorted([f for f in os.listdir(_path) if _name+"_" in f])
+        # if _name not in files: files.append(_name)
+        files = [filename]
+        for i, obj in enumerate(self._base_objs):
+            p = os.path.join(_path, wrap(files,i))
+            f = open(p, "r")
+            values = [(float(l.split()[0]), float(l.split()[1])) for l in f.readlines()]
+            scl = self._size / values[-1][0]
+            values = [(int(v[0]*scl), v[1]) for v in values]
+            f.close()
+            values = reducePoints(values, tolerance=tolerance)
+            self._list = values
+            obj.replace(values)
 
     def getPoints(self):
         return self._base_objs[0].getPoints()
@@ -794,6 +955,7 @@ class CurveTable(PyoTableObject):
     setTension(x) : Replace the `tension` attribute.
     setTension(x) : Replace the `bias` attribute.
     replace(list) : Draw a new envelope according to the `list` parameter.
+    loadRecFile(filename, tolerance) : Import an automation recording file.
     graph(yrange, title, wxnoserver) : Opens a grapher window to control 
         the shape of the envelope.
     
@@ -892,6 +1054,39 @@ class CurveTable(PyoTableObject):
         """      
         self._list = list
         [obj.replace(list) for obj in self._base_objs]
+
+    def loadRecFile(self, filename, tolerance=0.02):
+        """
+        Import an automation recording file in the table.
+
+        loadRecFile takes a recording file, usually from a ControlRec object,
+        as `filename` parameter, applies a filtering pre-processing to eliminate
+        redundancies and loads the result in the table as a list of points. 
+        Filtering process can be controled with the `tolerance` parameter. 
+
+        Parameters:
+
+        filename : string
+            Full path of an automation recording file.
+        tolerance : float, optional
+            Tolerance of the filter. A higher value will eliminate more points.
+            Defaults to 0.02.
+
+        """
+        _path, _name = os.path.split(filename)
+        # files = sorted([f for f in os.listdir(_path) if _name+"_" in f])
+        # if _name not in files: files.append(_name)
+        files = [filename]
+        for i, obj in enumerate(self._base_objs):
+            p = os.path.join(_path, wrap(files,i))
+            f = open(p, "r")
+            values = [(float(l.split()[0]), float(l.split()[1])) for l in f.readlines()]
+            scl = self._size / values[-1][0]
+            values = [(int(v[0]*scl), v[1]) for v in values]
+            f.close()
+            values = reducePoints(values, tolerance=tolerance)
+            self._list = values
+            obj.replace(values)
         
     def getPoints(self):
         return self._base_objs[0].getPoints()
@@ -979,6 +1174,7 @@ class ExpTable(PyoTableObject):
     setExp(x) : Replace the `exp` attribute.
     setInverse(x) : Replace the `inverse` attribute.
     replace(list) : Draw a new envelope according to the `list` parameter.
+    loadRecFile(filename, tolerance) : Import an automation recording file.
     graph(yrange, title, wxnoserver) : Opens a grapher window to control 
         the shape of the envelope.
 
@@ -1068,6 +1264,39 @@ class ExpTable(PyoTableObject):
         """      
         self._list = list
         [obj.replace(list) for obj in self._base_objs]
+
+    def loadRecFile(self, filename, tolerance=0.02):
+        """
+        Import an automation recording file in the table.
+
+        loadRecFile takes a recording file, usually from a ControlRec object,
+        as `filename` parameter, applies a filtering pre-processing to eliminate
+        redundancies and loads the result in the table as a list of points. 
+        Filtering process can be controled with the `tolerance` parameter. 
+
+        Parameters:
+
+        filename : string
+            Full path of an automation recording file.
+        tolerance : float, optional
+            Tolerance of the filter. A higher value will eliminate more points.
+            Defaults to 0.02.
+
+        """
+        _path, _name = os.path.split(filename)
+        # files = sorted([f for f in os.listdir(_path) if _name+"_" in f])
+        # if _name not in files: files.append(_name)
+        files = [filename]
+        for i, obj in enumerate(self._base_objs):
+            p = os.path.join(_path, wrap(files,i))
+            f = open(p, "r")
+            values = [(float(l.split()[0]), float(l.split()[1])) for l in f.readlines()]
+            scl = self._size / values[-1][0]
+            values = [(int(v[0]*scl), v[1]) for v in values]
+            f.close()
+            values = reducePoints(values, tolerance=tolerance)
+            self._list = values
+            obj.replace(values)
         
     def getPoints(self):
         return self._base_objs[0].getPoints()
@@ -1129,7 +1358,7 @@ class ExpTable(PyoTableObject):
             
 class SndTable(PyoTableObject):
     """
-    Load data from a soundfile into a function table.
+    Transfers data from a soundfile into a function table.
     
     If `chnl` is None, the table will contain as many table streams as 
     necessary to read all channels of the loaded sound.
@@ -1141,7 +1370,15 @@ class SndTable(PyoTableObject):
     path : string
         Full path name of the sound.
     chnl : int, optional
-        Channel number to read in. The default (None) reads all channels.
+        Channel number to read in. Available at initialization time only.
+        The default (None) reads all channels.
+    start : float, optional
+        Begins reading at `start` seconds into the file. Available at 
+        initialization time only. Defaults to 0.
+    stop : float, optional
+        Stops reading at `stop` seconds into the file.  Available at 
+        initialization time only. The default (None) means the end of 
+        the file.
 
     Methods:
 
@@ -1163,23 +1400,29 @@ class SndTable(PyoTableObject):
     >>> a = Osc(table=t, freq=t.getRate(), mul=.5).out()
 
     """
-    def __init__(self, path, chnl=None):
+    def __init__(self, path, chnl=None, start=0, stop=None):
         self._size = []
         self._dur = []
         self._base_objs = []
         self._path = path
         path, lmax = convertArgsToLists(path)
         for p in path:
-            _size, _dur, _snd_sr, _snd_chnls = sndinfo(p)
-            self._size.append(_size)
-            self._dur.append(_dur)
+            _size, _dur, _snd_sr, _snd_chnls, _format, _type = sndinfo(p)
             if chnl == None:
-                self._base_objs.extend([SndTable_base(p, i) for i in range(_snd_chnls)])
+                if stop == None:
+                    self._base_objs.extend([SndTable_base(p, i, start) for i in range(_snd_chnls)])
+                else:
+                    self._base_objs.extend([SndTable_base(p, i, start, stop) for i in range(_snd_chnls)])
             else:
-                self._base_objs.append(SndTable_base(p, chnl))
+                if stop == None:
+                    self._base_objs.append(SndTable_base(p, chnl, start))
+                else:
+                    self._base_objs.append(SndTable_base(p, chnl, start, stop))
+            self._size.append(self._base_objs[-1].getSize())
+            self._dur.append(self._size[-1] / float(_snd_sr))
         if lmax == 1:
-            self._size = _size
-            self._dur = _dur
+            self._size = self._base_objs[-1].getSize()
+            self._dur = self._size / float(_snd_sr)
 
     def __dir__(self):
         return ['sound']
@@ -1206,12 +1449,12 @@ class SndTable(PyoTableObject):
             path, lmax = convertArgsToLists(path)
             for i, obj in enumerate(self._base_objs):
                 p = path[i%lmax]
-                _size, _dur, _snd_sr, _snd_chnls = sndinfo(p)
+                _size, _dur, _snd_sr, _snd_chnls, _format, _type = sndinfo(p)
                 self._size.append(_size)
                 self._dur.append(_dur)
                 obj.setSound(p, 0)
         else:    
-            _size, _dur, _snd_sr, _snd_chnls = sndinfo(path)
+            _size, _dur, _snd_sr, _snd_chnls, _format, _type = sndinfo(path)
             self._size = _size
             self._dur = _dur
             self._path = path
@@ -1252,6 +1495,8 @@ class NewTable(PyoTableObject):
         Initial table. List of list can match the number of channels,
         otherwise, the list will be loaded in all tablestreams. 
         Defaults to None.
+    feedback : float, optional
+        Amount of old data to mix with a new recording. Defaults to 0.0.
         
     Methods:    
     
@@ -1261,7 +1506,12 @@ class NewTable(PyoTableObject):
     getRate() : Returns the frequency (cycle per second) to give 
         to an oscillator to read the sound at its original pitch.
     replace() : Replaces the actual table.
+    setFeedback() : Replace the `feedback` attribute.
 
+    Attributes:
+    
+    feedback : float. Amount of old data to mix with a new recording.
+    
     See also: DataTable, TableRec
 
     Examples:
@@ -1276,15 +1526,16 @@ class NewTable(PyoTableObject):
     >>> # b.play()
 
     """
-    def __init__(self, length, chnls=1, init=None):
+    def __init__(self, length, chnls=1, init=None, feedback=0.0):
         self._length = length
         self._chnls = chnls
+        self._feedback = feedback
         if init == None:
-            self._base_objs = [NewTable_base(length) for i in range(chnls)]
+            self._base_objs = [NewTable_base(length, feedback=feedback) for i in range(chnls)]
         else:
             if type(init[0]) != ListType: 
                 init = [init]
-            self._base_objs = [NewTable_base(length, wrap(init,i)) for i in range(chnls)]
+            self._base_objs = [NewTable_base(length, wrap(init,i), feedback) for i in range(chnls)]
                     
 
     def __dir__(self):
@@ -1305,6 +1556,19 @@ class NewTable(PyoTableObject):
         if type(x[0]) != ListType: 
             x = [x]
         [obj.setTable(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setFeedback(self, x):
+        """
+        Replaces the`feedback` attribute.
+
+        Parameters:
+
+        x : float
+            New `feedback` value.
+
+        """
+        self._feedback = x
+        [obj.setFeedback(x) for i, obj in enumerate(self._base_objs)]
         
     def getSize(self):
         """
@@ -1334,6 +1598,13 @@ class NewTable(PyoTableObject):
         
         """
         return self._base_objs[0].getRate()
+
+    @property
+    def feedback(self):
+        """float. Amount of old data to mix with a new recording.""" 
+        return self._feedback
+    @feedback.setter
+    def feedback(self, x): self.setFeedback(x)
 
 class DataTable(PyoTableObject):
     """
