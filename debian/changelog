@@ -1,3 +1,9 @@
+python-pyo (0.5.0-1~natty~ppa1) natty; urgency=low
+
+  * New upstream release.
+
+ -- Alexandre Quessy <alexandre@quessy.net>  Wed, 26 Oct 2011 15:17:52 -0400
+
 python-pyo (0.4.1-2~natty~ppa1) natty; urgency=low
 
   * Package for natty.
