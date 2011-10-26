@@ -23,7 +23,7 @@ from distutils.core import setup, Extension
 from distutils.sysconfig import get_python_lib
 import os, sys, getopt
 import time
-    
+
 build_osx_with_jack_support = False
 
 macros = []
@@ -48,17 +48,17 @@ if '--use-coreaudio' in sys.argv:
     
 path = 'src/engine/'
 files = ['pyomodule.c', 'servermodule.c', 'streammodule.c', 'dummymodule.c', 'mixmodule.c', 'inputfadermodule.c',
-        'interpolation.c']
+        'interpolation.c', 'fft.c', "wind.c"]
 source_files = [path + f for f in files]
 
 path = 'src/objects/'
-files = ['sfplayermodule.c', 'oscbankmodule.c', 'lfomodule.c', 'tablemodule.c', 'matrixmodule.c', 'oscilmodule.c', 'filtremodule.c', 
-        'noisemodule.c', 'distomodule.c',
+files = ['recordmodule.c', 'granulatormodule.c', 'fftmodule.c', 'sfplayermodule.c', 'oscbankmodule.c', 'lfomodule.c', 'tablemodule.c',
+         'matrixmodule.c', 'oscilmodule.c', 'filtremodule.c', 'noisemodule.c', 'distomodule.c',
         'inputmodule.c', 'fadermodule.c', 'midimodule.c', 'oscmodule.c', 'delaymodule.c',
         'metromodule.c', 'trigmodule.c', 'patternmodule.c', 'bandsplitmodule.c', 'hilbertmodule.c', 'panmodule.c',
-        'selectmodule.c', 'freeverbmodule.c', 'granulatormodule.c', 'compressmodule.c', 'analysismodule.c',
-        'convolvemodule.c', 'randommodule.c', 'wgverbmodule.c', 'utilsmodule.c', 'arithmeticmodule.c', 'sigmodule.c',
-        'matrixprocessmodule.c', 'harmonizermodule.c', 'recordmodule.c', 'chorusmodule.c']
+        'selectmodule.c', 'freeverbmodule.c', 'compressmodule.c', 'analysismodule.c', 'utilsmodule.c',
+        'convolvemodule.c', 'randommodule.c', 'wgverbmodule.c', 'arithmeticmodule.c', 'sigmodule.c',
+        'matrixprocessmodule.c', 'harmonizermodule.c', 'chorusmodule.c']
 source_files = source_files + [path + f for f in files]
     
 if sys.platform == "win32":
@@ -81,7 +81,7 @@ else:
 setup(  name = "pyo",
         author = "Olivier Belanger",
         author_email = "belangeo@gmail.com",
-        version = "0.4.1",
+        version = "0.5.0",
         description = "Python dsp module.",
         long_description = "pyo is a Python module written in C to help digital signal processing script creation.",
         url = "http://code.google.com/p/pyo/",

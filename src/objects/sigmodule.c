@@ -96,7 +96,6 @@ Sig_compute_next_data_frame(Sig *self)
         }
     }    
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -219,6 +218,7 @@ static PyObject * Sig_setSub(Sig *self, PyObject *arg) { SET_SUB };
 static PyObject * Sig_setDiv(Sig *self, PyObject *arg) { SET_DIV };	
 
 static PyObject * Sig_play(Sig *self, PyObject *args, PyObject *kwds) { PLAY };
+static PyObject * Sig_out(Sig *self, PyObject *args, PyObject *kwds) { OUT };
 static PyObject * Sig_stop(Sig *self) { STOP };
 
 static PyObject * Sig_multiply(Sig *self, PyObject *arg) { MULTIPLY };
@@ -244,6 +244,7 @@ static PyMethodDef Sig_methods[] = {
 {"_getStream", (PyCFunction)Sig_getStream, METH_NOARGS, "Returns stream object."},
 {"deleteStream", (PyCFunction)Sig_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
 {"play", (PyCFunction)Sig_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
+{"out", (PyCFunction)Sig_out, METH_VARARGS|METH_KEYWORDS, "Starts computing and sends sound to soundcard channel speficied by argument."},
 {"stop", (PyCFunction)Sig_stop, METH_NOARGS, "Stops computing."},
 {"setValue", (PyCFunction)Sig_setValue, METH_O, "Sets Sig value."},
 {"setMul", (PyCFunction)Sig_setMul, METH_O, "Sets Sig mul factor."},
@@ -455,7 +456,6 @@ SigTo_compute_next_data_frame(SigTo *self)
 {
     (*self->proc_func_ptr)(self);  
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -847,7 +847,6 @@ VarPort_compute_next_data_frame(VarPort *self)
 {
     (*self->proc_func_ptr)(self);  
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int

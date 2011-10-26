@@ -120,7 +120,6 @@ Midictl_compute_next_data_frame(Midictl *self)
     }  
     
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -394,6 +393,8 @@ void grabMidiNotes(MidiNote *self, PmEvent *buffer, int count)
         int status = Pm_MessageStatus(buffer[i].message);	// Temp note event holders
         int pitch = Pm_MessageData1(buffer[i].message);
         int velocity = Pm_MessageData2(buffer[i].message);
+        // int timestamp = buffer[i].timestamp;
+        // printf("pitch : %i, velocity : %i, timestamp : %i\n", pitch, velocity, timestamp);
     
         //printf("%i, %i, %i\n", status, pitch, velocity);
         if ((status & 0xF0) == 0x90 || (status & 0xF0) == 0x80) {
@@ -983,7 +984,6 @@ MidiAdsr_compute_next_data_frame(MidiAdsr *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int

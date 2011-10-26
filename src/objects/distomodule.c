@@ -60,7 +60,7 @@ Disto_transform_ii(Disto *self) {
     MYFLT slp = _clip(PyFloat_AS_DOUBLE(self->slope));
     
     for (i=0; i<self->bufsize; i++) {
-        val = atan2f(in[i], drv);
+        val = MYATAN2(in[i], drv);
         self->data[i] = val;
     }
     coeff = 1.0 - slp;
@@ -82,7 +82,7 @@ Disto_transform_ai(Disto *self) {
     
     for (i=0; i<self->bufsize; i++) {
         drv = .4 - _clip(drive[i]) * .3999;
-        val = atan2f(in[i], drv);
+        val = MYATAN2(in[i], drv);
         self->data[i] = val;
     }
     
@@ -104,7 +104,7 @@ Disto_transform_ia(Disto *self) {
     MYFLT *slope = Stream_getData((Stream *)self->slope_stream);
     
     for (i=0; i<self->bufsize; i++) {
-        val = atan2f(in[i], drv);
+        val = MYATAN2(in[i], drv);
         self->data[i] = val;
     }
     for (i=0; i<self->bufsize; i++) {
@@ -127,7 +127,7 @@ Disto_transform_aa(Disto *self) {
     
     for (i=0; i<self->bufsize; i++) {
         drv = .4 - _clip(drive[i]) * .3999;
-        val = atan2f(in[i], drv);
+        val = MYATAN2(in[i], drv);
         self->data[i] = val;
     }
     for (i=0; i<self->bufsize; i++) {
@@ -206,7 +206,6 @@ Disto_compute_next_data_frame(Disto *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -665,7 +664,6 @@ Clip_compute_next_data_frame(Clip *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -1153,7 +1151,6 @@ Mirror_compute_next_data_frame(Mirror *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -1657,7 +1654,6 @@ Wrap_compute_next_data_frame(Wrap *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -2158,7 +2154,6 @@ Degrade_compute_next_data_frame(Degrade *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int

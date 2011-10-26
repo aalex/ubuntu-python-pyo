@@ -34,15 +34,22 @@
 #define TYPE_F_II "f|ii"
 #define TYPE__FFF "|fff"
 #define TYPE_O_F "O|f"
+#define TYPE_O_FO "O|fO"
 #define TYPE__OF "|Of"
 #define TYPE_O_FOO "O|fOO"
 #define TYPE_I_FFOO "i|ffOO"
+#define TYPE_O_IF "O|if"
+#define TYPE_S_IFF "s|iff"
 #define TYPE_S__OIFI "s|Oifi"
 #define TYPE__FFFOO "|fffOO"
 #define TYPE__FFFFFOO "|fffffOO"
 #define TYPE_O_FFFFOO "O|ffffOO"
 #define TYPE_OO_F "OO|f"
+#define TYPE_OO_FI "OO|fi"
+#define TYPE_OO_IF "OO|if"
+#define TYPE_OOO_F "OOO|f"
 #define TYPE_F_O "f|O"
+#define TYPE_F_OF "f|Of"
 #define TYPE__OFFI "|Offi"
 #define TYPE__OFII "|Ofii"
 #define TYPE_O_OFOO "O|OfOO"
@@ -53,6 +60,7 @@
 #define TYPE_O_OOFOO "O|OOfOO"
 #define TYPE_O_OOFFOO "O|OOffOO"
 #define TYPE_OO_OOOIFOO "OO|OOOifOO"
+//#define TYPE_O_OOOOIIFIOO "O|OOOOiifiOO"
 
 #define SF_WRITE sf_write_float
 #define SF_READ sf_read_float
@@ -70,7 +78,9 @@
 #define MYFLOOR floorf
 #define MYTANH tanhf
 #define MYATAN atanf
+#define MYATAN2 atan2f
 #define MYEXP expf
+#define MYROUND roundf
 
 #else
 #define LIB_BASE_NAME "_pyo64"
@@ -82,15 +92,22 @@
 #define TYPE_F_II "d|ii"
 #define TYPE__FFF "|ddd"
 #define TYPE_O_F "O|d"
+#define TYPE_O_FO "O|dO"
 #define TYPE__OF "|Od"
 #define TYPE_O_FOO "O|dOO"
 #define TYPE_I_FFOO "i|ddOO"
+#define TYPE_O_IF "O|id"
+#define TYPE_S_IFF "s|idd"
 #define TYPE_S__OIFI "s|Oidi"
 #define TYPE__FFFOO "|dddOO"
 #define TYPE__FFFFFOO "|dddddOO"
 #define TYPE_O_FFFFOO "O|ddddOO"
 #define TYPE_OO_F "OO|d"
+#define TYPE_OO_FI "OO|di"
+#define TYPE_OO_IF "OO|id"
+#define TYPE_OOO_F "OOO|d"
 #define TYPE_F_O "d|O"
+#define TYPE_F_OF "d|Od"
 #define TYPE__OFFI "|Oddi"
 #define TYPE__OFII "|Odii"
 #define TYPE_O_OFOO "O|OdOO"
@@ -101,6 +118,7 @@
 #define TYPE_O_OOFOO "O|OOdOO"
 #define TYPE_O_OOFFOO "O|OOddOO"
 #define TYPE_OO_OOOIFOO "OO|OOOidOO"
+//#define TYPE_O_OOOOIIFIOO "O|OOOOiidiOO"
 
 #define SF_WRITE sf_write_double
 #define SF_READ sf_read_double
@@ -118,7 +136,9 @@
 #define MYFLOOR floor
 #define MYTANH tanh
 #define MYATAN atan
+#define MYATAN2 atan2
 #define MYEXP exp
+#define MYROUND round
 
 
 #endif
@@ -220,6 +240,7 @@ extern PyTypeObject IRAverageType;
 extern PyTypeObject IRFMType;
 
 extern PyTypeObject GranulatorType;
+extern PyTypeObject LooperType;
 extern PyTypeObject HarmonizerType;
 
 extern PyTypeObject MidictlType;
@@ -229,6 +250,12 @@ extern PyTypeObject MidiAdsrType;
 
 extern PyTypeObject DummyType;
 extern PyTypeObject RecordType;
+extern PyTypeObject ControlRecType;
+extern PyTypeObject ControlReadType;
+extern PyTypeObject ControlReadTrigType;
+extern PyTypeObject NoteinRecType;
+extern PyTypeObject NoteinReadType;
+extern PyTypeObject NoteinReadTrigType;
 extern PyTypeObject CompareType;
 extern PyTypeObject MixType;
 extern PyTypeObject SigType;
@@ -239,6 +266,7 @@ extern PyTypeObject InputFaderType;
 extern PyTypeObject HarmTableType;
 extern PyTypeObject ChebyTableType;
 extern PyTypeObject HannTableType;
+extern PyTypeObject WinTableType;
 extern PyTypeObject ParaTableType;
 extern PyTypeObject LinTableType;
 extern PyTypeObject CosTableType;
@@ -250,6 +278,8 @@ extern PyTypeObject NewTableType;
 extern PyTypeObject TableRecType;
 extern PyTypeObject TableRecTrigType;
 extern PyTypeObject TableMorphType;
+extern PyTypeObject TrigTableRecType;
+extern PyTypeObject TrigTableRecTrigType;
 
 extern PyTypeObject NewMatrixType;
 extern PyTypeObject MatrixPointerType;
@@ -260,6 +290,8 @@ extern PyTypeObject MatrixMorphType;
 extern PyTypeObject OscSendType;
 extern PyTypeObject OscReceiveType;
 extern PyTypeObject OscReceiverType;
+extern PyTypeObject OscDataSendType;
+extern PyTypeObject OscDataReceiveType;
 
 extern PyTypeObject TrigRandIntType;
 extern PyTypeObject TrigRandType;
@@ -313,6 +345,19 @@ extern PyTypeObject M_LogType;
 extern PyTypeObject M_Log2Type;
 extern PyTypeObject M_Log10Type;
 extern PyTypeObject M_PowType;
+extern PyTypeObject M_Atan2Type;
+extern PyTypeObject M_FloorType;
+extern PyTypeObject M_RoundType;
+
+extern PyTypeObject FFTMainType;
+extern PyTypeObject FFTType;
+extern PyTypeObject IFFTType;
+extern PyTypeObject CarToPolType;
+extern PyTypeObject PolToCarType;
+extern PyTypeObject FrameDeltaMainType;
+extern PyTypeObject FrameDeltaType;
+extern PyTypeObject FrameAccumMainType;
+extern PyTypeObject FrameAccumType;
 
 /* Constants */
 #define E M_E

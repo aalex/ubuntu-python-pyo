@@ -270,7 +270,6 @@ Delay_compute_next_data_frame(Delay *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -706,7 +705,6 @@ SDelay_compute_next_data_frame(SDelay *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -996,7 +994,7 @@ typedef struct {
 
 static void
 Waveguide_process_ii(Waveguide *self) {
-    MYFLT val, x, y, sampdel, frac, feed;
+    MYFLT val, x, y, sampdel, frac, feed, tmp;
     int i, ind, isamp;
     
     MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
@@ -1044,8 +1042,9 @@ Waveguide_process_ii(Waveguide *self) {
         val = self->buffer[ind];
         
         /* simple lowpass filtering */
+        tmp = val;
         val = (val + self->lpsamp) * 0.5;
-        self->lpsamp = val;
+        self->lpsamp = tmp;
 
         /* lagrange filtering */
         x = (val*self->coeffs[0])+(self->lagrange[0]*self->coeffs[1])+(self->lagrange[1]*self->coeffs[2])+
@@ -1074,7 +1073,7 @@ Waveguide_process_ii(Waveguide *self) {
 
 static void
 Waveguide_process_ai(Waveguide *self) {
-    MYFLT val, x, y, sampdel, frac, feed, freq;
+    MYFLT val, x, y, sampdel, frac, feed, freq, tmp;
     int i, ind, isamp;
     
     MYFLT *fr =Stream_getData((Stream *)self->freq_stream);
@@ -1125,8 +1124,9 @@ Waveguide_process_ai(Waveguide *self) {
         val = self->buffer[ind];
         
         /* simple lowpass filtering */
+        tmp = val;
         val = (val + self->lpsamp) * 0.5;
-        self->lpsamp = val;
+        self->lpsamp = tmp;
         
         /* lagrange filtering */
         x = (val*self->coeffs[0])+(self->lagrange[0]*self->coeffs[1])+(self->lagrange[1]*self->coeffs[2])+
@@ -1156,7 +1156,7 @@ Waveguide_process_ai(Waveguide *self) {
 
 static void
 Waveguide_process_ia(Waveguide *self) {
-    MYFLT val, x, y, sampdel, frac, feed, dur;
+    MYFLT val, x, y, sampdel, frac, feed, dur, tmp;
     int i, ind, isamp;
     
     MYFLT fr = PyFloat_AS_DOUBLE(self->freq);
@@ -1200,8 +1200,9 @@ Waveguide_process_ia(Waveguide *self) {
         val = self->buffer[ind];
         
         /* simple lowpass filtering */
+        tmp = val;
         val = (val + self->lpsamp) * 0.5;
-        self->lpsamp = val;
+        self->lpsamp = tmp;
         
         /* lagrange filtering */
         x = (val*self->coeffs[0])+(self->lagrange[0]*self->coeffs[1])+(self->lagrange[1]*self->coeffs[2])+
@@ -1231,7 +1232,7 @@ Waveguide_process_ia(Waveguide *self) {
 
 static void
 Waveguide_process_aa(Waveguide *self) {
-    MYFLT val, x, y, sampdel, frac, feed, freq, dur;
+    MYFLT val, x, y, sampdel, frac, feed, freq, dur, tmp;
     int i, ind, isamp;
     
     MYFLT *fr = Stream_getData((Stream *)self->freq_stream);
@@ -1281,8 +1282,9 @@ Waveguide_process_aa(Waveguide *self) {
         val = self->buffer[ind];
         
         /* simple lowpass filtering */
+        tmp = val;
         val = (val + self->lpsamp) * 0.5;
-        self->lpsamp = val;
+        self->lpsamp = tmp;
         
         /* lagrange filtering */
         x = (val*self->coeffs[0])+(self->lagrange[0]*self->coeffs[1])+(self->lagrange[1]*self->coeffs[2])+
@@ -1376,7 +1378,6 @@ Waveguide_compute_next_data_frame(Waveguide *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -2379,7 +2380,6 @@ AllpassWG_compute_next_data_frame(AllpassWG *self)
 {
     (*self->proc_func_ptr)(self); 
     (*self->muladd_func_ptr)(self);
-    Stream_setData(self->stream, self->data);
 }
 
 static int

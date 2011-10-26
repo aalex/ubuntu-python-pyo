@@ -1371,7 +1371,7 @@ class TableRec(PyoObject):
     >>> rec = TableRec(a, table=t, fadetime=0.01)
     >>> tr = TrigEnv(rec['trig'], table=t, dur=1).out()
 
-    See also: NewTable
+    See also: NewTable, TrigTableRec
     
     Examples:
     
@@ -1859,3 +1859,511 @@ class Granulator(PyoObject):
     @basedur.setter
     def basedur(self, x): self.setBaseDur(x)
 
+class TrigTableRec(PyoObject):
+    """
+    TrigTableRec is for writing samples into a previously created NewTable.
+
+    See `NewTable` to create an empty table.
+
+    Each time a "trigger" is received in the `trig` input, TrigTableRec
+    starts the recording into the table until the table is full.
+
+    Parent class: PyoObject
+
+    Parameters:
+
+    input : PyoObject
+        Audio signal to write in the table.
+    trig : PyoObject
+        Audio signal sending triggers.
+    table : PyoTableObject
+        The table where to write samples.
+    fadetime : float, optional
+        Fade time at the beginning and the end of the recording 
+        in seconds. Defaults to 0.
+
+    Methods:
+
+    setInput(x, fadetime) : Replace the `input` attribute.
+    setTrig(x, fadetime) : Replace the `trig` attribute.
+    setTable(x) : Replace the `table` attribute.
+
+    Attributes:
+
+    input : PyoObject. Audio signal to write in the table.
+    trig : PyoObject. Audio signal sending triggers.
+    table : PyoTableObject. The table where to write samples.
+
+    Notes:
+
+    The out() method is bypassed. TrigTableRec returns no signal.
+
+    TrigTableRec has no `mul` and `add` attributes.
+
+    TrigTableRec will sends a trigger signal at the end of the recording. 
+    User can retrieve the trigger streams by calling obj['trig'].
+
+    See also: NewTable, TableRec
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> snd = SNDS_PATH + '/transparent.aif'
+    >>> dur = sndinfo(snd)[1]
+    >>> t = NewTable(length=dur)
+    >>> src = SfPlayer(snd, mul=.5).out()
+    >>> trec = TrigTableRec(src, trig=Trig().play(), table=t)
+    >>> rep = TrigEnv(trec["trig"], table=t, dur=dur).out(1)
+
+    """
+    def __init__(self, input, trig, table, fadetime=0):
+        PyoObject.__init__(self)
+        self._input = input
+        self._trig = trig
+        self._table = table
+        self._in_fader = InputFader(input)
+        self._in_fader2 = InputFader(trig)
+        in_fader, in_fader2, table, fadetime, lmax = convertArgsToLists(self._in_fader, self._in_fader2, table, fadetime)
+        self._base_objs = [TrigTableRec_base(wrap(in_fader,i), wrap(in_fader2,i), wrap(table,i), wrap(fadetime,i)) for i in range(len(table))]
+        self._trig_objs = [TrigTableRecTrig_base(obj) for obj in self._base_objs]
+
+    def __dir__(self):
+        return ['input', 'trig', 'table', 'mul', 'add']
+
+    def __del__(self):
+        for obj in self._base_objs:
+            obj.deleteStream()
+            del obj
+        for obj in self._trig_objs:
+            obj.deleteStream()
+            del obj
+
+    def __getitem__(self, i):
+        if i == 'trig':
+            return self._trig_objs
+
+        if type(i) == SliceType:
+            return self._base_objs[i]
+        if i < len(self._base_objs):
+            return self._base_objs[i]
+        else:
+            print "'i' too large!"         
+
+    def play(self, dur=0, delay=0):
+        dur, delay, lmax = convertArgsToLists(dur, delay)
+        self._base_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._base_objs)]
+        self._trig_objs = [obj.play(wrap(dur,i), wrap(delay,i)) for i, obj in enumerate(self._trig_objs)]
+        return self
+
+    def stop(self):
+        [obj.stop() for obj in self._base_objs]
+        [obj.stop() for obj in self._trig_objs]
+        return self
+
+    def out(self, chnl=0, inc=1, dur=0, delay=0):
+        return self
+
+    def setMul(self, x):
+        pass
+
+    def setAdd(self, x):
+        pass    
+
+    def setInput(self, x, fadetime=0.05):
+        """
+        Replace the `input` attribute.
+
+        Parameters:
+
+        x : PyoObject
+            New signal to process.
+        fadetime : float, optional
+            Crossfade time between old and new input. Defaults to 0.05.
+
+        """
+        self._input = x
+        self._in_fader.setInput(x, fadetime)
+
+    def setTrig(self, x, fadetime=0.05):
+        """
+        Replace the `trig` attribute.
+
+        Parameters:
+
+        x : PyoObject
+            New trigger signal.
+        fadetime : float, optional
+            Crossfade time between old and new input. Defaults to 0.05.
+
+        """
+        self._trig = x
+        self._in_fader2.setInput(x, fadetime)
+
+    def setTable(self, x):
+        """
+        Replace the `table` attribute.
+
+        Parameters:
+
+        x : NewTable
+            new `table` attribute.
+
+        """
+        self._table = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setTable(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = []
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    @property
+    def input(self):
+        """PyoObject. Audio signal to write in the table.""" 
+        return self._input
+    @input.setter
+    def input(self, x): self.setInput(x)
+
+    @property
+    def trig(self):
+        """PyoObject. Audio signal sending triggers.""" 
+        return self._trig
+    @trig.setter
+    def trig(self, x): self.setTrig(x)
+
+    @property
+    def table(self):
+        """PyoTableObject. The table where to write samples."""
+        return self._table
+    @table.setter
+    def table(self, x): self.setTable(x)
+
+class Looper(PyoObject):
+    """
+    Crossfading looper.
+
+    Looper reads audio from a PyoTableObject and plays it back in a loop with 
+    user-defined pitch, start time, duration and crossfade time. The `mode`
+    argument allows the user to choose different looping modes.
+
+    Parent class: PyoObject
+
+    Parameters:
+
+    table : PyoTableObject
+        Table containing the waveform samples.
+    pitch : float or PyoObject, optional
+        Transposition factor. 1 is normal pitch, 0.5 is one octave lower, 2 is 
+        one octave higher. Negative values are not allowed. Defaults to 1.
+    start : float or PyoObject, optional
+        Starting point, in seconds, of the loop, updated only once per loop cycle. 
+        Defaults to 0.
+    dur : float or PyoObject, optional
+        Duration, in seconds, of the loop, updated only once per loop cycle. 
+        Defaults to 1.
+    xfade : float or PyoObject {0 -> 50}, optional
+        Percent of the loop time used to crossfade readers, updated only once per 
+        loop cycle and clipped between 0 and 50. Defaults to 20.
+    mode : int {0, 1, 2, 3}, optional
+        Loop modes. Defaults to 1. 
+            0 : no loop
+            1 : forward 
+            2 : backward
+            3 : back-and-forth
+    xfadeshape : int {0, 1, 2}, optional
+        Crossfade envelope shape. Defaults to 0. 
+            0 : linear
+            1 : equal power
+            2 : sigmoid
+    startfromloop : boolean, optional
+        If True, reading will begin directly at the loop start point. Otherwise, it
+        begins at the beginning of the table. Defaults to False.
+    interp : int {1, 2, 3, 4}, optional
+        Choice of the interpolation method. Defaults to 2.
+            1 : no interpolation
+            2 : linear
+            3 : cosinus
+            4 : cubic
+    autosmooth : boolean, optional
+        If True, a lowpass filter, following the pitch, is applied on the output signal
+        to reduce the quantization noise produced by very low transpositions.
+        Defaults to False.
+
+    Methods:
+
+    setTable(x) : Replace the `table` attribute.
+    setPitch(x) : Replace the `pitch` attribute.
+    setStart(x) : Replace the `start` attribute.
+    setDur(x) : Replace the `dur` attribute.
+    setXfade(x) : Replace the `xfade` attribute.
+    setMode(x) : Replace the `mode` attribute.
+    setXfadeShape(x) : Replace the `xfadeshape` attribute.
+    setStartFromLoop(x) : Replace the `startfromloop` attribute.
+    setInterp(x) : Replace the `interp` attribute.
+    setAutoSmooth(x) : Replace the `autosmooth` attribute.
+    
+    Attributes:
+
+    table : PyoTableObject. Table containing the waveform samples.
+    pitch : float or PyoObject, Transposition factor.
+    start : float or PyoObject, Loop start position in seconds.
+    dur : float or PyoObject, Loop duration in seconds.
+    xfade : float or PyoObject, Crossfade duration in percent.
+    mode : int, Looping mode.
+    xfadeshape : int, Crossfade envelope.
+    startfromloop : boolean, Init starting point.
+    interp : int, Interpolation method.
+    autosmooth : boolean, Automatic lowpass filter.
+
+    See also: Granulator, Pointer
+
+    Examples:
+
+    >>> s = Server().boot()
+    >>> s.start()
+    >>> tab = SndTable(SNDS_PATH + '/transparent.aif')
+    >>> pit = Choice(choice=[.5,.75,1,1.25,1.5], freq=[3,4])
+    >>> start = Phasor(freq=.2, mul=tab.getDur())
+    >>> dur = Choice(choice=[.0625,.125,.125,.25,.33], freq=4)
+    >>> a = Looper(table=tab, pitch=pit, start=start, dur=dur, startfromloop=True, mul=.5).out()
+
+    """
+    def __init__(self, table, pitch=1, start=0, dur=1., xfade=20, mode=1, xfadeshape=0, startfromloop=False, interp=2, autosmooth=False, mul=1, add=0):
+        PyoObject.__init__(self)
+        self._table = table
+        self._pitch = pitch
+        self._start = start
+        self._dur = dur
+        self._xfade = xfade
+        self._mode = mode
+        self._xfadeshape = xfadeshape
+        self._startfromloop = startfromloop
+        self._interp = interp
+        self._autosmooth = autosmooth
+        self._mul = mul
+        self._add = add
+        table, pitch, start, dur, xfade, mode, xfadeshape, startfromloop, interp, autosmooth, mul, add, lmax = convertArgsToLists(
+                                        table, pitch, start, dur, xfade, mode, xfadeshape, startfromloop, interp, autosmooth, mul, add)
+        self._base_objs = [Looper_base(wrap(table,i), wrap(pitch,i), wrap(start,i), wrap(dur,i), wrap(xfade,i), wrap(mode,i), 
+            wrap(xfadeshape,i), wrap(startfromloop,i), wrap(interp,i), wrap(autosmooth,i), wrap(mul,i), wrap(add,i)) for i in range(lmax)]
+
+    def __dir__(self):
+        return ['table', 'pitch', 'start', 'dur', 'xfade', 'mode', 'xfadeshape', 'startfromloop', 'interp', 'autosmooth', 'mul', 'add']
+
+    def setTable(self, x):
+        """
+        Replace the `table` attribute.
+
+        Parameters:
+
+        x : PyoTableObject
+            new `table` attribute.
+
+        """
+        self._table = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setTable(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setPitch(self, x):
+        """
+        Replace the `pitch` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            new `pitch` attribute.
+
+        """
+        self._pitch = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setPitch(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setStart(self, x):
+        """
+        Replace the `start` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            new `start` attribute.
+
+        """
+        self._start = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setStart(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setDur(self, x):
+        """
+        Replace the `dur` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            new `dur` attribute.
+
+        """
+        self._dur = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setDur(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setXfade(self, x):
+        """
+        Replace the `xfade` attribute.
+
+        Parameters:
+
+        x : float or PyoObject
+            new `xfade` attribute.
+
+        """
+        self._xfade = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setXfade(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setXfadeShape(self, x):
+        """
+        Replace the `xfadeshape` attribute.
+
+        Parameters:
+
+        x : int
+            new `xfadeshape` attribute.
+
+        """
+        self._xfadeshape = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setXfadeShape(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setStartFromLoop(self, x):
+        """
+        Replace the `startfromloop` attribute.
+
+        Parameters:
+
+        x : boolean
+            new `startfromloop` attribute.
+
+        """
+        self._startfromloop = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setStartFromLoop(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setMode(self, x):
+        """
+        Replace the `mode` attribute.
+
+        Parameters:
+
+        x : int
+            new `mode` attribute.
+
+        """
+        self._mode = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setMode(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setInterp(self, x):
+        """
+        Replace the `interp` attribute.
+
+        Parameters:
+
+        x : int
+            new `interp` attribute.
+
+        """
+        self._interp = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setInterp(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def setAutoSmooth(self, x):
+        """
+        Replace the `autosmooth` attribute.
+
+        Parameters:
+
+        x : boolean
+            new `autosmooth` attribute.
+
+        """
+        self._autosmooth = x
+        x, lmax = convertArgsToLists(x)
+        [obj.setAutoSmooth(wrap(x,i)) for i, obj in enumerate(self._base_objs)]
+
+    def ctrl(self, map_list=None, title=None, wxnoserver=False):
+        self._map_list = [SLMap(0.1, 2., 'lin', 'pitch', self._pitch),
+                          SLMap(0., self._table.getDur(), 'lin', 'start', self._start),
+                          SLMap(0.01, 1., 'lin', 'dur', self._dur),
+                          SLMapMul(self._mul)]
+        PyoObject.ctrl(self, map_list, title, wxnoserver)
+
+    @property
+    def table(self):
+        """PyoTableObject. Table containing the waveform samples."""
+        return self._table
+    @table.setter
+    def table(self, x): self.setTable(x)
+
+    @property
+    def pitch(self):
+        """float or PyoObject. Transposition factor."""
+        return self._pitch
+    @pitch.setter
+    def pitch(self, x): self.setPitch(x)
+
+    @property
+    def start(self):
+        """float or PyoObject. Loop start position in seconds."""
+        return self._start
+    @start.setter
+    def start(self, x): self.setStart(x)
+
+    @property
+    def dur(self):
+        """float or PyoObject. Loop duration in seconds."""
+        return self._dur
+    @dur.setter
+    def dur(self, x): self.setDur(x)
+
+    @property
+    def xfade(self):
+        """float or PyoObject. Crossfade duration in percent."""
+        return self._xfade
+    @xfade.setter
+    def xfade(self, x): self.setXfade(x)
+
+    @property
+    def xfadeshape(self):
+        """int. Crossfade envelope."""
+        return self._xfadeshape
+    @xfadeshape.setter
+    def xfadeshape(self, x): self.setXfadeShape(x)
+
+    @property
+    def startfromloop(self):
+        """boolean. Starts from loop point if True, otherwise starts from beginning of the sound."""
+        return self._startfromloop
+    @startfromloop.setter
+    def startfromloop(self, x): self.setStartFromLoop(x)
+
+    @property
+    def mode(self):
+        """int. Looping mode."""
+        return self._mode
+    @mode.setter
+    def mode(self, x): self.setMode(x)
+
+    @property
+    def interp(self):
+        """int. Interpolation method."""
+        return self._interp
+    @interp.setter
+    def interp(self, x): self.setInterp(x)
+
+    @property
+    def autosmooth(self):
+        """boolean. Activates a lowpass filter applied on output signal."""
+        return self._autosmooth
+    @autosmooth.setter
+    def autosmooth(self, x): self.setAutoSmooth(x)

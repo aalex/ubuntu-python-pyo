@@ -337,7 +337,7 @@ portmidi_get_default_input(){
 /****** Libsndfile utilities ******/
 #define sndinfo_info \
 "\nRetrieve informations about a soundfile.\n\n\
-Prints the infos of the given soundfile to the console and returns a tuple containing (number of frames, duration in seconds, sampling rate, number of channels).\n\nsndinfo(path, print=False)\n\nParameters:\n\n    \
+Prints the infos of the given soundfile to the console and returns a tuple containing:\n (number of frames, duration in seconds, sampling rate, number of channels, file format, sample type).\n\nsndinfo(path, print=False)\n\nParameters:\n\n    \
 path : string\n        Path of a valid soundfile.\n    \
 print : boolean, optional\n        If True, sndinfo will print sound infos to the console. Defaults to False.\n\n"
 
@@ -347,27 +347,94 @@ sndinfo(PyObject *self, PyObject *args, PyObject *kwds) {
     
     SNDFILE *sf;
     SF_INFO info;
+    char *pathtmp;
     char *path;
+    char fileformat[5];
+    char *sampletype;
+    int format;
+    int subformat;
     int print = 0;
 
     static char *kwlist[] = {"path", "print", NULL};
 
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "s|i", kwlist, &path, &print))
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "s|i", kwlist, &pathtmp, &print))
         return NULL;
+
+    path = malloc(strlen(pathtmp)+1);
+    strcpy(path, pathtmp);
 
     /* Open the sound file. */
     info.format = 0;
     sf = sf_open(path, SFM_READ, &info);
-    if (sf == NULL)
-    {
+    if (sf == NULL) {
         printf("Failed to open the file.\n");
         Py_RETURN_NONE;
     }
     else {
+        /* Retrieve file format */
+        format = (int)info.format;
+        if (format > SF_FORMAT_WAV && format < SF_FORMAT_AIFF) {
+            strcpy(fileformat, "WAVE");
+            subformat = format - SF_FORMAT_WAV;
+        }
+        else if (format > SF_FORMAT_AIFF && format < SF_FORMAT_AU) {
+            strcpy(fileformat, "AIFF");
+            subformat = format - SF_FORMAT_AIFF;
+        }
+        else {
+            strcpy(fileformat, "????");
+            subformat = -1;
+        }
+        /* Retrieve sample type */
+        if (subformat != -1) {
+            switch (subformat) {
+                case SF_FORMAT_PCM_S8:
+                    sampletype = malloc(strlen("s8 bit int") + 1);
+                    strcpy(sampletype, "s8 bit int");
+                    break;
+                case SF_FORMAT_PCM_U8:
+                    sampletype = malloc(strlen("u8 bit int") + 1);
+                    strcpy(sampletype, "u8 bit int");
+                    break;
+                case SF_FORMAT_PCM_16:
+                    sampletype = malloc(strlen("16 bit int") + 1);
+                    strcpy(sampletype, "16 bit int");
+                    break;
+                case SF_FORMAT_PCM_24:
+                    sampletype = malloc(strlen("24 bit int") + 1);
+                    strcpy(sampletype, "24 bit int");
+                    break;
+                case SF_FORMAT_PCM_32:
+                    sampletype = malloc(strlen("32 bit int") + 1);
+                    strcpy(sampletype, "32 bit int");
+                    break;
+                case SF_FORMAT_FLOAT:
+                    sampletype = malloc(strlen("32 bit float") + 1);
+                    strcpy(sampletype, "32 bit float");
+                    break;
+                case SF_FORMAT_DOUBLE:
+                    sampletype = malloc(strlen("64 bit float") + 1);
+                    strcpy(sampletype, "64 bit float");
+                    break;
+                default:
+                    sampletype = malloc(strlen("Unknown...") + 1);
+                    strcpy(sampletype, "Unknown...");
+                    break;
+            }
+        }
+        else {
+            sampletype = malloc(strlen("Unknown...") + 1);
+            strcpy(sampletype, "Unknown...");
+        }
+    
         if (print)
-            fprintf(stdout, "name: %s\nnumber of frames: %i\nduration: %.4f sec\nsr: %.2f\nchannels: %i\n", path, (int)info.frames, ((float)info.frames / info.samplerate), (float)info.samplerate, (int)info.channels);
-        PyObject *sndinfo = PyTuple_Pack(4, PyInt_FromLong(info.frames), PyFloat_FromDouble((float)info.frames / info.samplerate), PyFloat_FromDouble(info.samplerate), PyInt_FromLong(info.channels));
+            fprintf(stdout, "name: %s\nnumber of frames: %i\nduration: %.4f sec\nsr: %.2f\nchannels: %i\nformat: %s\nsample type: %s\n", 
+                    path, (int)info.frames, ((float)info.frames / info.samplerate), (float)info.samplerate, (int)info.channels, fileformat, sampletype);
+        PyObject *sndinfo = PyTuple_Pack(6, PyInt_FromLong(info.frames), PyFloat_FromDouble((float)info.frames / info.samplerate), PyFloat_FromDouble(info.samplerate), 
+                                         PyInt_FromLong(info.channels), PyString_FromString(fileformat), PyString_FromString(sampletype));
         sf_close(sf);
+        free(path);
+        free(sampletype);
         return sndinfo;
         
     }
@@ -384,10 +451,10 @@ fileformat : int, optional\n        Format type of the new file. Defaults to 0. 
         1 : AIFF - Apple/SGI AIFF format (big endian) {.aif, .aiff}\n    \
 sampletype ; int, optional\n        Bit depth encoding of the audio file. Defaults to 0. Supported types are:\n    \
         0 : 16 bit int\n    \
-        1 : 24 bits int\n    \
-        2 : 32 bits int\n    \
-        3 : 32 bits float\n    \
-        4 : 64 bits float\n\n"
+        1 : 24 bit int\n    \
+        2 : 32 bit int\n    \
+        3 : 32 bit float\n    \
+        4 : 64 bit float\n\n"
 
 static PyObject *
 savefile(PyObject *self, PyObject *args, PyObject *kwds) {
@@ -464,6 +531,171 @@ savefile(PyObject *self, PyObject *args, PyObject *kwds) {
     Py_RETURN_NONE;    
 }
 
+#define reducePoints_info \
+"\nDouglas–Peucker curve reduction algorithm.\n\n\
+This function receives a list of points as input and returns a simplified list by eliminating redundancies.\n\n\
+A point is a tuple (or a list) of two floats, time and value. A list of points looks like: [(0, 0), (0.1, 0.7), (0.2, 0.5), ...]\n\n\
+reducePoints(pointlist, tolerance=0.02)\n\nParameters:\n\n    \
+pointlist : list of lists or list of tuples\n        List of points (time, value) to filter.\n    \
+tolerance : float, optional\n        Normalized distance threshold under which a point is\n        excluded from the list. Defaults to 0.02."
+
+typedef struct STACK_RECORD {
+    int nAnchorIndex;
+    int nFloaterIndex;
+    struct STACK_RECORD *precPrev;
+} STACK_RECORD;
+
+STACK_RECORD *m_pStack = NULL;
+
+void StackPush( int nAnchorIndex, int nFloaterIndex )
+{
+    STACK_RECORD *precPrev = m_pStack;
+    m_pStack = (STACK_RECORD *)malloc( sizeof(STACK_RECORD) );
+    m_pStack->nAnchorIndex = nAnchorIndex;
+    m_pStack->nFloaterIndex = nFloaterIndex;
+    m_pStack->precPrev = precPrev;
+}
+
+int StackPop( int *pnAnchorIndex, int *pnFloaterIndex )
+{
+    STACK_RECORD *precStack = m_pStack;
+    if ( precStack == NULL )
+        return 0;
+    *pnAnchorIndex = precStack->nAnchorIndex;
+    *pnFloaterIndex = precStack->nFloaterIndex;
+    m_pStack = precStack->precPrev;
+    free( precStack );
+    return 1;
+}
+
+static PyObject *
+reducePoints(PyObject *self, PyObject *args, PyObject *kwds)
+{
+    int i, nPointsCount, nVertexIndex, nAnchorIndex, nFloaterIndex;
+    MYFLT dSegmentVecLength;
+    MYFLT dAnchorVecX, dAnchorVecY;
+    MYFLT dAnchorUnitVecX, dAnchorUnitVecY;
+    MYFLT dVertexVecLength;
+    MYFLT dVertexVecX, dVertexVecY;
+    MYFLT dProjScalar;
+    MYFLT dVertexDistanceToSegment;
+    MYFLT dMaxDistThisSegment;
+    int nVertexIndexMaxDistance;
+    PyObject *pointlist, *pPointsOut, *tup;
+    MYFLT *pPointsX, *pPointsY;
+    int *pnUseFlag;
+    MYFLT dTolerance = .02;
+    MYFLT xMax, yMin, yMax, yRange;;
+    
+    static char *kwlist[] = {"pointlist", "tolerance", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, TYPE_O_F, kwlist, &pointlist, &dTolerance))
+        return PyInt_FromLong(-1);
+    
+    nPointsCount = PyList_Size(pointlist);
+    
+    pPointsX = (MYFLT *)malloc(nPointsCount * sizeof(MYFLT));
+    pPointsY = (MYFLT *)malloc(nPointsCount * sizeof(MYFLT));
+    pnUseFlag = (int *)malloc(nPointsCount * sizeof(int));
+    
+    tup = PyList_GET_ITEM(pointlist, 0);
+    if (PyTuple_Check(tup) == 1) {
+        for (i=0; i<nPointsCount; i++) {
+            tup = PyList_GET_ITEM(pointlist, i);
+            pPointsX[i] = PyFloat_AsDouble(PyNumber_Float(PyTuple_GET_ITEM(tup, 0)));
+            pPointsY[i] = PyFloat_AsDouble(PyNumber_Float(PyTuple_GET_ITEM(tup, 1)));
+            pnUseFlag[i] = 0;
+        }
+    }
+    else {
+        for (i=0; i<nPointsCount; i++) {
+            tup = PyList_GET_ITEM(pointlist, i);
+            pPointsX[i] = PyFloat_AsDouble(PyNumber_Float(PyList_GET_ITEM(tup, 0)));
+            pPointsY[i] = PyFloat_AsDouble(PyNumber_Float(PyList_GET_ITEM(tup, 1)));
+            pnUseFlag[i] = 0;
+        }
+    }
+
+    // rescale points between 0. and 1.
+    xMax = pPointsX[nPointsCount-1];
+    yMin = 9999999999.9; yMax = -999999.9;
+    for (i=0; i<nPointsCount; i++) {
+        if (pPointsY[i] < yMin)
+            yMin = pPointsY[i];
+        else if (pPointsY[i] > yMax)
+            yMax = pPointsY[i];
+    }    
+    yRange = yMax - yMin;
+    for (i=0; i<nPointsCount; i++) {
+        pPointsX[i] = pPointsX[i] / xMax;
+        pPointsY[i] = (pPointsY[i] - yMin) / yMax;
+    }
+
+    // filter...
+    pnUseFlag[0] = pnUseFlag[nPointsCount-1] = 1;
+    nAnchorIndex = 0;
+    nFloaterIndex = nPointsCount - 1;
+    StackPush( nAnchorIndex, nFloaterIndex );
+    while ( StackPop( &nAnchorIndex, &nFloaterIndex ) ) {
+        // initialize line segment
+        dAnchorVecX = pPointsX[ nFloaterIndex ] - pPointsX[ nAnchorIndex ];
+        dAnchorVecY = pPointsY[ nFloaterIndex ] - pPointsY[ nAnchorIndex ];
+        dSegmentVecLength = sqrt( dAnchorVecX * dAnchorVecX
+                                 + dAnchorVecY * dAnchorVecY );
+        dAnchorUnitVecX = dAnchorVecX / dSegmentVecLength;
+        dAnchorUnitVecY = dAnchorVecY / dSegmentVecLength;
+        // inner loop:
+        dMaxDistThisSegment = 0.0;
+        nVertexIndexMaxDistance = nAnchorIndex + 1;
+        for ( nVertexIndex = nAnchorIndex + 1; nVertexIndex < nFloaterIndex; nVertexIndex++ ) {
+            //compare to anchor
+            dVertexVecX = pPointsX[ nVertexIndex ] - pPointsX[ nAnchorIndex ];
+            dVertexVecY = pPointsY[ nVertexIndex ] - pPointsY[ nAnchorIndex ];
+            dVertexVecLength = sqrt( dVertexVecX * dVertexVecX
+                                    + dVertexVecY * dVertexVecY );
+            //dot product:
+            dProjScalar = dVertexVecX * dAnchorUnitVecX + dVertexVecY * dAnchorUnitVecY;
+            if ( dProjScalar < 0.0 )
+                dVertexDistanceToSegment = dVertexVecLength;
+            else {
+                //compare to floater
+                dVertexVecX = pPointsX[ nVertexIndex ] - pPointsX[ nFloaterIndex ];
+                dVertexVecY = pPointsY[ nVertexIndex ] - pPointsY[ nFloaterIndex ];
+                dVertexVecLength = sqrt( dVertexVecX * dVertexVecX
+                                        + dVertexVecY * dVertexVecY );
+                //dot product:
+                dProjScalar = dVertexVecX * (-dAnchorUnitVecX) + dVertexVecY * (-dAnchorUnitVecY);
+                if ( dProjScalar < 0.0 )
+                    dVertexDistanceToSegment = dVertexVecLength;
+                else //calculate perpendicular distance to line (pythagorean theorem):
+                    dVertexDistanceToSegment =
+                    sqrt( fabs( dVertexVecLength * dVertexVecLength - dProjScalar * dProjScalar ) );
+            }
+            if ( dMaxDistThisSegment < dVertexDistanceToSegment ) {
+                dMaxDistThisSegment = dVertexDistanceToSegment;
+                nVertexIndexMaxDistance = nVertexIndex;
+            }
+        }
+        if ( dMaxDistThisSegment <= dTolerance ) { //use line segment
+            pnUseFlag[ nAnchorIndex ] = 1;
+            pnUseFlag[ nFloaterIndex ] = 1;
+        }
+        else {
+            StackPush( nAnchorIndex, nVertexIndexMaxDistance );
+            StackPush( nVertexIndexMaxDistance, nFloaterIndex );
+        }
+    }
+    
+    pPointsOut = PyList_New(0);    
+    for (i=0; i<nPointsCount; i++) {
+        if (pnUseFlag[i] == 1) {
+            PyList_Append(pPointsOut, PyList_GET_ITEM(pointlist, i));
+        }
+    }        
+
+    return pPointsOut;    
+}
+
 /****** Conversion utilities ******/
 static PyObject *
 midiToHz(PyObject *self, PyObject *arg) {
@@ -505,6 +737,7 @@ static PyMethodDef pyo_functions[] = {
 {"pm_get_default_input", (PyCFunction)portmidi_get_default_input, METH_NOARGS, "Returns Portmidi default input device."},
 {"sndinfo", (PyCFunction)sndinfo, METH_VARARGS|METH_KEYWORDS, sndinfo_info},
 {"savefile", (PyCFunction)savefile, METH_VARARGS|METH_KEYWORDS, savefile_info},
+{"reducePoints", (PyCFunction)reducePoints, METH_VARARGS|METH_KEYWORDS, reducePoints_info},
 {"midiToHz", (PyCFunction)midiToHz, METH_O, "Returns the frequency in Hertz equivalent to the given midi note."},
 {"midiToTranspo", (PyCFunction)midiToTranspo, METH_O, "Returns the transposition factor equivalent to the given midi note (central key = 60)."},
 {"sampsToSec", (PyCFunction)sampsToSec, METH_O, "Returns the number of samples equivalent of the given duration in seconds."},
@@ -542,7 +775,38 @@ init_pyo64(void)
         return;
     Py_INCREF(&RecordType);
     PyModule_AddObject(m, "Record_base", (PyObject *)&RecordType);
-    
+
+    if (PyType_Ready(&ControlRecType) < 0)
+        return;
+    Py_INCREF(&ControlRecType);
+    PyModule_AddObject(m, "ControlRec_base", (PyObject *)&ControlRecType);
+
+    if (PyType_Ready(&ControlReadType) < 0)
+        return;
+    Py_INCREF(&ControlReadType);
+    PyModule_AddObject(m, "ControlRead_base", (PyObject *)&ControlReadType);
+
+    if (PyType_Ready(&ControlReadTrigType) < 0)
+        return;
+    Py_INCREF(&ControlReadTrigType);
+    PyModule_AddObject(m, "ControlReadTrig_base", (PyObject *)&ControlReadTrigType);
+
+    if (PyType_Ready(&NoteinRecType) < 0)
+        return;
+    Py_INCREF(&NoteinRecType);
+    PyModule_AddObject(m, "NoteinRec_base", (PyObject *)&NoteinRecType);
+
+    if (PyType_Ready(&NoteinReadType) < 0)
+        return;
+    Py_INCREF(&NoteinReadType);
+    PyModule_AddObject(m, "NoteinRead_base", (PyObject *)&NoteinReadType);
+
+    if (PyType_Ready(&NoteinReadTrigType) < 0)
+        return;
+    Py_INCREF(&NoteinReadTrigType);
+    PyModule_AddObject(m, "NoteinReadTrig_base", (PyObject *)&NoteinReadTrigType);
+
+
     if (PyType_Ready(&CompareType) < 0)
         return;
     Py_INCREF(&CompareType);
@@ -608,6 +872,11 @@ init_pyo64(void)
     Py_INCREF(&HannTableType);
     PyModule_AddObject(m, "HannTable_base", (PyObject *)&HannTableType);
 
+    if (PyType_Ready(&WinTableType) < 0)
+        return;
+    Py_INCREF(&WinTableType);
+    PyModule_AddObject(m, "WinTable_base", (PyObject *)&WinTableType);
+
     if (PyType_Ready(&ParaTableType) < 0)
         return;
     Py_INCREF(&ParaTableType);
@@ -653,16 +922,26 @@ init_pyo64(void)
     Py_INCREF(&TableRecType);
     PyModule_AddObject(m, "TableRec_base", (PyObject *)&TableRecType);
 
-    if (PyType_Ready(&TableMorphType) < 0)
-        return;
-    Py_INCREF(&TableMorphType);
-    PyModule_AddObject(m, "TableMorph_base", (PyObject *)&TableMorphType);
-    
     if (PyType_Ready(&TableRecTrigType) < 0)
         return;
     Py_INCREF(&TableRecTrigType);
     PyModule_AddObject(m, "TableRecTrig_base", (PyObject *)&TableRecTrigType);
+    
+    if (PyType_Ready(&TableMorphType) < 0)
+        return;
+    Py_INCREF(&TableMorphType);
+    PyModule_AddObject(m, "TableMorph_base", (PyObject *)&TableMorphType);
 
+    if (PyType_Ready(&TrigTableRecType) < 0)
+        return;
+    Py_INCREF(&TrigTableRecType);
+    PyModule_AddObject(m, "TrigTableRec_base", (PyObject *)&TrigTableRecType);
+    
+    if (PyType_Ready(&TrigTableRecTrigType) < 0)
+        return;
+    Py_INCREF(&TrigTableRecTrigType);
+    PyModule_AddObject(m, "TrigTableRecTrig_base", (PyObject *)&TrigTableRecTrigType);
+    
     /* Matrix objects */
     if (PyType_Ready(&MatrixStreamType) < 0)
         return;
@@ -1079,6 +1358,11 @@ init_pyo64(void)
     Py_INCREF(&OscSendType);
     PyModule_AddObject(m, "OscSend_base", (PyObject *)&OscSendType);
 
+    if (PyType_Ready(&OscDataSendType) < 0)
+        return;
+    Py_INCREF(&OscDataSendType);
+    PyModule_AddObject(m, "OscDataSend_base", (PyObject *)&OscDataSendType);
+    
     if (PyType_Ready(&OscReceiveType) < 0)
         return;
     Py_INCREF(&OscReceiveType);
@@ -1088,6 +1372,11 @@ init_pyo64(void)
         return;
     Py_INCREF(&OscReceiverType);
     PyModule_AddObject(m, "OscReceiver_base", (PyObject *)&OscReceiverType);
+
+    if (PyType_Ready(&OscDataReceiveType) < 0)
+        return;
+    Py_INCREF(&OscDataReceiveType);
+    PyModule_AddObject(m, "OscDataReceive_base", (PyObject *)&OscDataReceiveType);
     
     if (PyType_Ready(&TrigRandType) < 0)
         return;
@@ -1324,6 +1613,11 @@ init_pyo64(void)
     Py_INCREF(&GranulatorType);
     PyModule_AddObject(m, "Granulator_base", (PyObject *)&GranulatorType);
 
+    if (PyType_Ready(&LooperType) < 0)
+        return;
+    Py_INCREF(&LooperType);
+    PyModule_AddObject(m, "Looper_base", (PyObject *)&LooperType);
+    
 	if (PyType_Ready(&HarmonizerType) < 0)
         return;
     Py_INCREF(&HarmonizerType);
@@ -1378,6 +1672,21 @@ init_pyo64(void)
         return;
     Py_INCREF(&M_PowType);
     PyModule_AddObject(m, "M_Pow_base", (PyObject *)&M_PowType);    
+
+    if (PyType_Ready(&M_Atan2Type) < 0)
+        return;
+    Py_INCREF(&M_Atan2Type);
+    PyModule_AddObject(m, "M_Atan2_base", (PyObject *)&M_Atan2Type);    
+
+    if (PyType_Ready(&M_FloorType) < 0)
+        return;
+    Py_INCREF(&M_FloorType);
+    PyModule_AddObject(m, "M_Floor_base", (PyObject *)&M_FloorType);    
+
+    if (PyType_Ready(&M_RoundType) < 0)
+        return;
+    Py_INCREF(&M_RoundType);
+    PyModule_AddObject(m, "M_Round_base", (PyObject *)&M_RoundType);    
     
     if (PyType_Ready(&SnapType) < 0)
         return;
@@ -1393,5 +1702,50 @@ init_pyo64(void)
         return;
     Py_INCREF(&SampHoldType);
     PyModule_AddObject(m, "SampHold_base", (PyObject *)&SampHoldType);
+
+    if (PyType_Ready(&FFTMainType) < 0)
+        return;
+    Py_INCREF(&FFTMainType);
+    PyModule_AddObject(m, "FFTMain_base", (PyObject *)&FFTMainType);
+
+    if (PyType_Ready(&FFTType) < 0)
+        return;
+    Py_INCREF(&FFTType);
+    PyModule_AddObject(m, "FFT_base", (PyObject *)&FFTType);
+
+    if (PyType_Ready(&IFFTType) < 0)
+        return;
+    Py_INCREF(&IFFTType);
+    PyModule_AddObject(m, "IFFT_base", (PyObject *)&IFFTType);
+
+    if (PyType_Ready(&CarToPolType) < 0)
+        return;
+    Py_INCREF(&CarToPolType);
+    PyModule_AddObject(m, "CarToPol_base", (PyObject *)&CarToPolType);
+
+    if (PyType_Ready(&PolToCarType) < 0)
+        return;
+    Py_INCREF(&PolToCarType);
+    PyModule_AddObject(m, "PolToCar_base", (PyObject *)&PolToCarType);
+
+    if (PyType_Ready(&FrameDeltaMainType) < 0)
+        return;
+    Py_INCREF(&FrameDeltaMainType);
+    PyModule_AddObject(m, "FrameDeltaMain_base", (PyObject *)&FrameDeltaMainType);
+    
+    if (PyType_Ready(&FrameDeltaType) < 0)
+        return;
+    Py_INCREF(&FrameDeltaType);
+    PyModule_AddObject(m, "FrameDelta_base", (PyObject *)&FrameDeltaType);
+
+    if (PyType_Ready(&FrameAccumType) < 0)
+        return;
+    Py_INCREF(&FrameAccumType);
+    PyModule_AddObject(m, "FrameAccum_base", (PyObject *)&FrameAccumType);
+
+    if (PyType_Ready(&FrameAccumMainType) < 0)
+        return;
+    Py_INCREF(&FrameAccumMainType);
+    PyModule_AddObject(m, "FrameAccumMain_base", (PyObject *)&FrameAccumMainType);
     
 }

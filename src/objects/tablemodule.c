@@ -26,6 +26,7 @@
 #include "servermodule.h"
 #include "dummymodule.h"
 #include "sndfile.h"
+#include "wind.h"
 
 #define __TABLE_MODULE
 #include "tablemodule.h"
@@ -48,12 +49,6 @@ TableStream_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     return (PyObject *)self;
 }
 
-int
-TableStream_getSize(TableStream *self)
-{
-    return self->size;
-}
-
 MYFLT *
 TableStream_getData(TableStream *self)
 {
@@ -66,10 +61,28 @@ TableStream_setData(TableStream *self, MYFLT *data)
     self->data = data;
 }    
 
+int
+TableStream_getSize(TableStream *self)
+{
+    return self->size;
+}
+
 void
 TableStream_setSize(TableStream *self, int size)
 {
     self->size = size;
+}    
+
+double
+TableStream_getSamplingRate(TableStream *self)
+{
+    return self->samplingRate;
+}
+
+void
+TableStream_setSamplingRate(TableStream *self, double sr)
+{
+    self->samplingRate = sr;
 }    
 
 PyTypeObject TableStreamType = {
@@ -216,7 +229,10 @@ HarmTable_init(HarmTable *self, PyObject *args, PyObject *kwds)
     TableStream_setSize(self->tablestream, self->size);
     TableStream_setData(self->tablestream, self->data);
     HarmTable_generate(self);
-        
+
+    double sr = PyFloat_AsDouble(PyObject_CallMethod(self->server, "getSamplingRate", NULL));
+    TableStream_setSamplingRate(self->tablestream, sr);
+
     Py_INCREF(self);
     return 0;
 }
@@ -489,7 +505,10 @@ ChebyTable_init(ChebyTable *self, PyObject *args, PyObject *kwds)
     TableStream_setSize(self->tablestream, self->size);
     TableStream_setData(self->tablestream, self->data);
     ChebyTable_generate(self);
-    
+
+    double sr = PyFloat_AsDouble(PyObject_CallMethod(self->server, "getSamplingRate", NULL));
+    TableStream_setSamplingRate(self->tablestream, sr);
+
     Py_INCREF(self);
     return 0;
 }
@@ -694,7 +713,10 @@ HannTable_init(HannTable *self, PyObject *args, PyObject *kwds)
     TableStream_setSize(self->tablestream, self->size);
 	TableStream_setData(self->tablestream, self->data);
     HannTable_generate(self);
-    
+
+    double sr = PyFloat_AsDouble(PyObject_CallMethod(self->server, "getSamplingRate", NULL));
+    TableStream_setSamplingRate(self->tablestream, sr);
+
     Py_INCREF(self);
     return 0;
 }
@@ -801,6 +823,204 @@ HannTable_new,                 /* tp_new */
 };
 
 /***********************/
+/* WinTable structure  */
+/***********************/
+typedef struct {
+    pyo_table_HEAD
+    int type;
+} WinTable;
+
+static void
+WinTable_generate(WinTable *self) {
+    gen_window(self->data, self->size, self->type);
+    self->data[self->size] = self->data[0];
+}
+
+static int
+WinTable_traverse(WinTable *self, visitproc visit, void *arg)
+{
+    Py_VISIT(self->server);
+    Py_VISIT(self->tablestream);
+    return 0;
+}
+
+static int 
+WinTable_clear(WinTable *self)
+{
+    Py_CLEAR(self->server);
+    Py_CLEAR(self->tablestream);
+    return 0;
+}
+
+static void
+WinTable_dealloc(WinTable* self)
+{
+    free(self->data);
+    WinTable_clear(self);
+    self->ob_type->tp_free((PyObject*)self);
+}
+
+static PyObject *
+WinTable_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    WinTable *self;
+    
+    self = (WinTable *)type->tp_alloc(type, 0);
+    
+    self->server = PyServer_get_server();
+    
+    self->size = 8192;
+    self->type = 2;
+    
+    MAKE_NEW_TABLESTREAM(self->tablestream, &TableStreamType, NULL);
+    
+    return (PyObject *)self;
+}
+
+static int
+WinTable_init(WinTable *self, PyObject *args, PyObject *kwds)
+{    
+    static char *kwlist[] = {"type", "size", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "|ii", kwlist, &self->type, &self->size))
+        return -1; 
+    
+    self->data = (MYFLT *)realloc(self->data, (self->size+1) * sizeof(MYFLT));
+    TableStream_setSize(self->tablestream, self->size);
+	TableStream_setData(self->tablestream, self->data);
+    WinTable_generate(self);
+
+    double sr = PyFloat_AsDouble(PyObject_CallMethod(self->server, "getSamplingRate", NULL));
+    TableStream_setSamplingRate(self->tablestream, sr);
+
+    Py_INCREF(self);
+    return 0;
+}
+
+static PyObject * WinTable_getServer(WinTable* self) { GET_SERVER };
+static PyObject * WinTable_getTableStream(WinTable* self) { GET_TABLE_STREAM };
+static PyObject * WinTable_setData(WinTable *self, PyObject *arg) { SET_TABLE_DATA };
+static PyObject * WinTable_normalize(WinTable *self) { NORMALIZE };
+static PyObject * WinTable_getTable(WinTable *self) { GET_TABLE };
+static PyObject * WinTable_getViewTable(WinTable *self) { GET_VIEW_TABLE };
+static PyObject * WinTable_put(WinTable *self, PyObject *args, PyObject *kwds) { TABLE_PUT };
+static PyObject * WinTable_get(WinTable *self, PyObject *args, PyObject *kwds) { TABLE_GET };
+
+static PyObject *
+WinTable_setSize(WinTable *self, PyObject *value)
+{
+    if (value == NULL) {
+        PyErr_SetString(PyExc_TypeError, "Cannot delete the size attribute.");
+        return PyInt_FromLong(-1);
+    }
+    
+    if (! PyInt_Check(value)) {
+        PyErr_SetString(PyExc_TypeError, "The size attribute value must be an integer.");
+        return PyInt_FromLong(-1);
+    }
+    
+    self->size = PyInt_AsLong(value); 
+    
+    self->data = (MYFLT *)realloc(self->data, (self->size+1) * sizeof(MYFLT));
+    TableStream_setSize(self->tablestream, self->size);
+    
+    WinTable_generate(self);
+    
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyObject *
+WinTable_getSize(WinTable *self)
+{
+    return PyInt_FromLong(self->size);
+};
+
+static PyObject *
+WinTable_setType(WinTable *self, PyObject *value)
+{
+    if (value == NULL) {
+        PyErr_SetString(PyExc_TypeError, "Cannot delete the type attribute.");
+        return PyInt_FromLong(-1);
+    }
+    
+    if (! PyInt_Check(value)) {
+        PyErr_SetString(PyExc_TypeError, "The type attribute value must be an integer.");
+        return PyInt_FromLong(-1);
+    }
+    
+    self->type = PyInt_AsLong(value);
+    
+    WinTable_generate(self);
+    
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyMemberDef WinTable_members[] = {
+{"server", T_OBJECT_EX, offsetof(WinTable, server), 0, "Pyo server."},
+{"tablestream", T_OBJECT_EX, offsetof(WinTable, tablestream), 0, "Table stream object."},
+{NULL}  /* Sentinel */
+};
+
+static PyMethodDef WinTable_methods[] = {
+{"getServer", (PyCFunction)WinTable_getServer, METH_NOARGS, "Returns server object."},
+{"getTable", (PyCFunction)WinTable_getTable, METH_NOARGS, "Returns a list of table samples."},
+{"getViewTable", (PyCFunction)WinTable_getViewTable, METH_NOARGS, "Returns a list of pixel coordinates for drawing the table."},
+{"getTableStream", (PyCFunction)WinTable_getTableStream, METH_NOARGS, "Returns table stream object created by this table."},
+{"setData", (PyCFunction)WinTable_setData, METH_O, "Sets the table from samples in a text file."},
+{"normalize", (PyCFunction)WinTable_normalize, METH_NOARGS, "Normalize table samples between -1 and 1"},
+{"setSize", (PyCFunction)WinTable_setSize, METH_O, "Sets the size of the table in samples"},
+{"getSize", (PyCFunction)WinTable_getSize, METH_NOARGS, "Return the size of the table in samples"},
+{"setType", (PyCFunction)WinTable_setType, METH_O, "Sets the type of the table."},
+{"put", (PyCFunction)WinTable_put, METH_VARARGS|METH_KEYWORDS, "Puts a value at specified position in the table."},
+{"get", (PyCFunction)WinTable_get, METH_VARARGS|METH_KEYWORDS, "Gets the value at specified position in the table."},
+{NULL}  /* Sentinel */
+};
+
+PyTypeObject WinTableType = {
+PyObject_HEAD_INIT(NULL)
+0,                         /*ob_size*/
+"_pyo.WinTable_base",         /*tp_name*/
+sizeof(WinTable),         /*tp_basicsize*/
+0,                         /*tp_itemsize*/
+(destructor)WinTable_dealloc, /*tp_dealloc*/
+0,                         /*tp_print*/
+0,                         /*tp_getattr*/
+0,                         /*tp_setattr*/
+0,                         /*tp_compare*/
+0,                         /*tp_repr*/
+0,                         /*tp_as_number*/
+0,                         /*tp_as_sequence*/
+0,                         /*tp_as_mapping*/
+0,                         /*tp_hash */
+0,                         /*tp_call*/
+0,                         /*tp_str*/
+0,                         /*tp_getattro*/
+0,                         /*tp_setattro*/
+0,                         /*tp_as_buffer*/
+Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC, /*tp_flags*/
+"WinTable objects. Generates a table filled with a hanning function.",  /* tp_doc */
+(traverseproc)WinTable_traverse,   /* tp_traverse */
+(inquiry)WinTable_clear,           /* tp_clear */
+0,		               /* tp_richcompare */
+0,		               /* tp_weaklistoffset */
+0,		               /* tp_iter */
+0,		               /* tp_iternext */
+WinTable_methods,             /* tp_methods */
+WinTable_members,             /* tp_members */
+0,                      /* tp_getset */
+0,                         /* tp_base */
+0,                         /* tp_dict */
+0,                         /* tp_descr_get */
+0,                         /* tp_descr_set */
+0,                         /* tp_dictoffset */
+(initproc)WinTable_init,      /* tp_init */
+0,                         /* tp_alloc */
+WinTable_new,                 /* tp_new */
+};
+
+/***********************/
 /* ParaTable structure */
 /***********************/
 typedef struct {
@@ -881,7 +1101,10 @@ ParaTable_init(ParaTable *self, PyObject *args, PyObject *kwds)
     TableStream_setSize(self->tablestream, self->size);
 	TableStream_setData(self->tablestream, self->data);
     ParaTable_generate(self);
-    
+
+    double sr = PyFloat_AsDouble(PyObject_CallMethod(self->server, "getSamplingRate", NULL));
+    TableStream_setSamplingRate(self->tablestream, sr);
+
     Py_INCREF(self);
     return 0;
 }
@@ -1016,6 +1239,8 @@ LinTable_generate(LinTable *self) {
         y1 = PyInt_AsLong(PyNumber_Long(PyTuple_GET_ITEM(tup2, 0)));
         y2 = PyFloat_AsDouble(PyNumber_Float(PyTuple_GET_ITEM(tup2, 1)));
         steps = y1 - x1;
+        if (steps <= 0)
+            continue;
         diff = (y2 - x2) / steps;
         for(j=0; j<steps; j++) {
             self->data[x1+j] = x2 + diff * j;
@@ -1101,7 +1326,10 @@ LinTable_init(LinTable *self, PyObject *args, PyObject *kwds)
     TableStream_setSize(self->tablestream, self->size);
     TableStream_setData(self->tablestream, self->data);
     LinTable_generate(self);
-    
+
+    double sr = PyFloat_AsDouble(PyObject_CallMethod(self->server, "getSamplingRate", NULL));
+    TableStream_setSamplingRate(self->tablestream, sr);
+
     Py_INCREF(self);
     return 0;
 }
@@ -1293,6 +1521,8 @@ CosTable_generate(CosTable *self) {
         y2 = PyFloat_AsDouble(PyNumber_Float(PyTuple_GET_ITEM(tup2, 1)));
         
         steps = y1 - x1;
+        if (steps <= 0)
+            continue;
         for(j=0; j<steps; j++) {
             mu = (MYFLT)j / steps;
             mu2 = (1.0-MYCOS(mu*PI))/2.0;
@@ -1379,7 +1609,10 @@ CosTable_init(CosTable *self, PyObject *args, PyObject *kwds)
     TableStream_setSize(self->tablestream, self->size);
     TableStream_setData(self->tablestream, self->data);
     CosTable_generate(self);
-    
+
+    double sr = PyFloat_AsDouble(PyObject_CallMethod(self->server, "getSamplingRate", NULL));
+    TableStream_setSamplingRate(self->tablestream, sr);
+
     Py_INCREF(self);
     return 0;
 }
@@ -1595,6 +1828,8 @@ CurveTable_generate(CurveTable *self) {
         y0 = values[i-1]; y1 = values[i]; y2 = values[i+1]; y3 = values[i+2];
         
         steps = x2 - x1;
+        if (steps <= 0)
+            continue;
         for(j=0; j<steps; j++) {
             mu = (MYFLT)j / steps;
             mu2 = mu * mu;
@@ -1684,7 +1919,10 @@ CurveTable_init(CurveTable *self, PyObject *args, PyObject *kwds)
     TableStream_setSize(self->tablestream, self->size);
     TableStream_setData(self->tablestream, self->data);
     CurveTable_generate(self);
-    
+
+    double sr = PyFloat_AsDouble(PyObject_CallMethod(self->server, "getSamplingRate", NULL));
+    TableStream_setSamplingRate(self->tablestream, sr);
+
     Py_INCREF(self);
     return 0;
 }
@@ -1931,6 +2169,8 @@ ExpTable_generate(ExpTable *self) {
         
         range = y2 - y1;
         steps = x2 - x1;
+        if (steps <= 0)
+            continue;
         inc = 1.0 / steps;
         pointer = 0.0;
         if (self->inverse == 1) {
@@ -2030,7 +2270,10 @@ ExpTable_init(ExpTable *self, PyObject *args, PyObject *kwds)
     TableStream_setSize(self->tablestream, self->size);
     TableStream_setData(self->tablestream, self->data);
     ExpTable_generate(self);
-    
+
+    double sr = PyFloat_AsDouble(PyObject_CallMethod(self->server, "getSamplingRate", NULL));
+    TableStream_setSamplingRate(self->tablestream, sr);
+
     Py_INCREF(self);
     return 0;
 }
@@ -2244,36 +2487,45 @@ typedef struct {
     char *path;
     int sndSr;
     int chnl;
+    MYFLT start;
+    MYFLT stop;
 } SndTable;
 
 static void
 SndTable_loadSound(SndTable *self) {
     SNDFILE *sf;
     SF_INFO info;
-    unsigned int i, num, num_items, num_chnls;
-    MYFLT val;
+    unsigned int i, num, num_items, num_chnls, snd_size, start, stop;
     MYFLT *tmp;
         
-    /* Open the WAV file. */
     info.format = 0;
     sf = sf_open(self->path, SFM_READ, &info);
     if (sf == NULL)
     {
         printf("Failed to open the file.\n");
     }
-    /* Print some of the info, and figure out how much data to read. */
-    self->size = info.frames;
+    snd_size = info.frames;
     self->sndSr = info.samplerate;
     num_chnls = info.channels;
-    /*
-    printf("samples = %d\n", self->size);
-    printf("samplingrate = %d\n", self->sndSr);
-    printf("channels = %d\n", num_chnls);
-    */
+
+    if (self->stop <= 0 || self->stop <= self->start || (self->stop*self->sndSr) > snd_size)
+        stop = snd_size;
+    else
+        stop = (unsigned int)(self->stop * self->sndSr);
+
+    if (self->start < 0 || (self->start*self->sndSr) > snd_size)
+        start = 0;
+    else
+        start = (unsigned int)(self->start * self->sndSr);
+    
+    self->size = stop - start;
     num_items = self->size * num_chnls;
+    
     /* Allocate space for the data to be read, then read it. */
     self->data = (MYFLT *)realloc(self->data, (self->size + 1) * sizeof(MYFLT));
     tmp = (MYFLT *)malloc(num_items * sizeof(MYFLT));
+    
+    sf_seek(sf, start, SEEK_SET);
     num = SF_READ(sf, tmp, num_items);
     sf_close(sf);
     for (i=0; i<num_items; i++) {
@@ -2281,11 +2533,14 @@ SndTable_loadSound(SndTable *self) {
             self->data[(int)(i/num_chnls)] = tmp[i];
         }    
     }
-    val = self->data[0];
-    self->data[self->size] = val;  
 
+    self->data[self->size] = self->data[0];  
+
+    self->start = 0.0;
+    self->stop = -1.0;
     free(tmp);
     TableStream_setSize(self->tablestream, self->size);
+    TableStream_setSamplingRate(self->tablestream, self->sndSr);
     TableStream_setData(self->tablestream, self->data);
 }
 
@@ -2323,6 +2578,7 @@ SndTable_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     self->server = PyServer_get_server();
     
     self->chnl = 0;
+    self->stop = -1.0;
 
     MAKE_NEW_TABLESTREAM(self->tablestream, &TableStreamType, NULL);
     
@@ -2332,9 +2588,9 @@ SndTable_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 static int
 SndTable_init(SndTable *self, PyObject *args, PyObject *kwds)
 {    
-    static char *kwlist[] = {"path", "chnl", NULL};
+    static char *kwlist[] = {"path", "chnl", "start", "stop", NULL};
     
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "s|i", kwlist, &self->path, &self->chnl))
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, TYPE_S_IFF, kwlist, &self->path, &self->chnl, &self->start, &self->stop))
         return -1; 
     
     SndTable_loadSound(self);
@@ -2366,10 +2622,6 @@ SndTable_getViewTable(SndTable *self) {
     samples = PyList_New(w*4);
     for(i=0; i<w; i++) {
         absin = 0.0;
-        /*for (j=0; j<step; j++) {
-            absin += self->data[count++];
-        }
-        y = (int)(MYFABS(absin / step) * amp); */
         for (j=0; j<step; j++) {
             if (MYFABS(self->data[count++]) > absin)
                 absin = self->data[count];
@@ -2482,6 +2734,7 @@ SndTable_new,                 /* tp_new */
 typedef struct {
     pyo_table_HEAD
     MYFLT length;
+    MYFLT feedback;
     int pointer;
 } NewTable;
 
@@ -2490,11 +2743,22 @@ NewTable_recordChunk(NewTable *self, MYFLT *data, int datasize)
 {
     int i;
 
-    for (i=0; i<datasize; i++) {
-        self->data[self->pointer++] = data[i];
-        if (self->pointer == self->size)
-            self->pointer = 0;
-    }    
+    if (self->feedback == 0.0) {
+        for (i=0; i<datasize; i++) {
+            self->data[self->pointer++] = data[i];
+            if (self->pointer == self->size)
+                self->pointer = 0;
+        }
+    }
+    else {
+        for (i=0; i<datasize; i++) {
+            self->data[self->pointer] = data[i] + self->data[self->pointer] * self->feedback;
+            self->pointer++;
+            if (self->pointer == self->size)
+                self->pointer = 0;
+        }
+    }
+
     Py_INCREF(Py_None);
     return Py_None;
 }
@@ -2533,6 +2797,7 @@ NewTable_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     self->server = PyServer_get_server();
     
     self->pointer = 0;
+    self->feedback = 0.0;
     
     MAKE_NEW_TABLESTREAM(self->tablestream, &TableStreamType, NULL);
     
@@ -2544,12 +2809,12 @@ NewTable_init(NewTable *self, PyObject *args, PyObject *kwds)
 {    
     int i;
     PyObject *inittmp=NULL;
-    static char *kwlist[] = {"length", "init", NULL};
+    static char *kwlist[] = {"length", "init", "feedback", NULL};
     
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, TYPE_F_O, kwlist, &self->length, &inittmp))
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, TYPE_F_OF, kwlist, &self->length, &inittmp, &self->feedback))
         return -1; 
 
-    MYFLT sr = PyFloat_AsDouble(PyObject_CallMethod(self->server, "getSamplingRate", NULL)); \
+    double sr = PyFloat_AsDouble(PyObject_CallMethod(self->server, "getSamplingRate", NULL));
     self->size = (int)(self->length * sr + 0.5);
     self->data = (MYFLT *)realloc(self->data, (self->size + 1) * sizeof(MYFLT));
 
@@ -2564,6 +2829,7 @@ NewTable_init(NewTable *self, PyObject *args, PyObject *kwds)
     }
     
     TableStream_setData(self->tablestream, self->data);
+    TableStream_setSamplingRate(self->tablestream, sr);
 
     Py_INCREF(self);
     return 0;
@@ -2625,6 +2891,23 @@ NewTable_setTable(NewTable *self, PyObject *value)
     Py_RETURN_NONE;    
 }
 
+static PyObject *
+NewTable_setFeedback(NewTable *self, PyObject *value)
+{
+    MYFLT feed;
+
+    if (PyNumber_Check(value)) {
+        feed = PyFloat_AsDouble(PyNumber_Float(value));
+        if (feed < -1.0)
+            feed = -1.0;
+        else if (feed > 1.0)
+            feed = 1.0;
+        self->feedback = feed;
+    }
+        
+    Py_RETURN_NONE;    
+}
+
 static PyMemberDef NewTable_members[] = {
 {"server", T_OBJECT_EX, offsetof(NewTable, server), 0, "Pyo server."},
 {"tablestream", T_OBJECT_EX, offsetof(NewTable, tablestream), 0, "Table stream object."},
@@ -2637,6 +2920,7 @@ static PyMethodDef NewTable_methods[] = {
 {"setTable", (PyCFunction)NewTable_setTable, METH_O, "Sets the table content from a list of floats (must be the same size as the object size)."},
 {"getViewTable", (PyCFunction)NewTable_getViewTable, METH_NOARGS, "Returns a list of pixel coordinates for drawing the table."},
 {"getTableStream", (PyCFunction)NewTable_getTableStream, METH_NOARGS, "Returns table stream object created by this table."},
+{"setFeedback", (PyCFunction)NewTable_setFeedback, METH_O, "Feedback sets the amount of old data to mix with a new recording."},
 {"setData", (PyCFunction)NewTable_setData, METH_O, "Sets the table from samples in a text file."},
 {"normalize", (PyCFunction)NewTable_normalize, METH_NOARGS, "Normalize table samples between -1 and 1"},
 {"put", (PyCFunction)NewTable_put, METH_VARARGS|METH_KEYWORDS, "Puts a value at specified position in the table."},
@@ -2760,7 +3044,10 @@ DataTable_init(DataTable *self, PyObject *args, PyObject *kwds)
     }
     
     TableStream_setData(self->tablestream, self->data);
-    
+
+    double sr = PyFloat_AsDouble(PyObject_CallMethod(self->server, "getSamplingRate", NULL));
+    TableStream_setSamplingRate(self->tablestream, sr);
+
     Py_INCREF(self);
     return 0;
 }
@@ -3019,10 +3306,13 @@ TableRec_init(TableRec *self, PyObject *args, PyObject *kwds)
     }    
     
     int size = PyInt_AsLong(NewTable_getSize((NewTable *)self->table));
-    if ((self->fadetime * self->sr) > (size * 0.5))
-        self->fadetime = size * 0.5 / self->sr;
-    self->fadeInSample = roundf(self->fadetime * self->sr + 0.5);
-        
+    if ((self->fadetime * self->sr) >= (size * 0.5))
+        self->fadetime = size * 0.499 / self->sr;
+    if (self->fadetime == 0.0)
+        self->fadeInSample = 0.0;
+    else
+        self->fadeInSample = MYROUND(self->fadetime * self->sr + 0.5);
+    
     Py_INCREF(self);
     return 0;
 }
@@ -3147,7 +3437,6 @@ TableRecTrig_compute_next_data_frame(TableRecTrig *self)
     for (i=0; i<self->bufsize; i++) {
         self->data[i] = tmp[i];
     }    
-    Stream_setData(self->stream, self->data);
 }
 
 static int
@@ -3509,3 +3798,448 @@ TableMorph_members,             /* tp_members */
 TableMorph_new,                 /* tp_new */
 };
 
+/******************************/
+/* TrigTableRec object definition */
+/******************************/
+typedef struct {
+    pyo_audio_HEAD
+    PyObject *input;
+    Stream *input_stream;
+    PyObject *trig;
+    Stream *trig_stream;
+    NewTable *table;
+    int pointer;
+    int active;
+    MYFLT fadetime;
+    MYFLT fadeInSample;
+    MYFLT *trigsBuffer;
+    MYFLT *tempTrigsBuffer;
+} TrigTableRec;
+
+static void
+TrigTableRec_compute_next_data_frame(TrigTableRec *self)
+{
+    int i, j, num, upBound;
+    MYFLT val;
+    int size = PyInt_AsLong(NewTable_getSize((NewTable *)self->table));
+
+    MYFLT *in = Stream_getData((Stream *)self->input_stream);
+    MYFLT *trig = Stream_getData((Stream *)self->trig_stream);
+
+    if (self->active == 1) {
+        if ((size - self->pointer) >= self->bufsize)
+            num = self->bufsize;
+        else {
+            num = size - self->pointer;
+            if (self->active == 1) {
+                if (num <= 0)
+                    self->trigsBuffer[0] = 1.0;
+                else
+                    self->trigsBuffer[num-1] = 1.0;
+                self->active = 0;
+            }    
+        }
+    
+        if (self->pointer < size) {   
+            upBound = size - self->fadeInSample;
+        
+            MYFLT buffer[num];
+            memset(&buffer, 0, sizeof(buffer));
+        
+            for (i=0; i<num; i++) {
+                if (self->pointer < self->fadeInSample)
+                    val = self->pointer / self->fadeInSample;
+                else if (self->pointer > upBound)
+                    val = (size - self->pointer) / self->fadeInSample;
+                else
+                    val = 1.;
+                buffer[i] = in[i] * val;
+                self->pointer++;
+            }
+            NewTable_recordChunk((NewTable *)self->table, buffer, num);
+        }
+    }
+    else {
+        for (j=0; j<self->bufsize; j++) {
+            if (trig[j] == 1.0) {
+                self->active = 1;
+                self->pointer = 0;
+                if (size >= self->bufsize)
+                    num = self->bufsize - j;
+                else {
+                    num = size < (self->bufsize - j) ? size : (self->bufsize - j);
+                    if (self->active == 1) {
+                        if (num <= 0)
+                            self->trigsBuffer[0] = 1.0;
+                        else
+                            self->trigsBuffer[num-1] = 1.0;
+                        self->active = 0;
+                    }    
+                }
+                
+                upBound = size - self->fadeInSample;
+                    
+                MYFLT buffer[num];
+                memset(&buffer, 0, sizeof(buffer));
+                
+                for (i=0; i<num; i++) {
+                    if (self->pointer < self->fadeInSample) {
+                        val = self->pointer / self->fadeInSample;
+                    }
+                    else if (self->pointer > upBound)
+                        val = (size - self->pointer) / self->fadeInSample;
+                    else
+                        val = 1.;
+                    buffer[i] = in[i+j] * val;
+                    self->pointer++;
+                }
+                NewTable_recordChunk((NewTable *)self->table, buffer, num);
+                break;
+            }
+        }
+    }
+}
+
+static int
+TrigTableRec_traverse(TrigTableRec *self, visitproc visit, void *arg)
+{
+    pyo_VISIT
+    Py_VISIT(self->input);
+    Py_VISIT(self->input_stream);
+    Py_VISIT(self->trig);
+    Py_VISIT(self->trig_stream);
+    Py_VISIT(self->table);
+    return 0;
+}
+
+static int 
+TrigTableRec_clear(TrigTableRec *self)
+{
+    pyo_CLEAR
+    Py_CLEAR(self->input);
+    Py_CLEAR(self->input_stream);
+    Py_CLEAR(self->trig);
+    Py_CLEAR(self->trig_stream);
+    Py_CLEAR(self->table);
+    return 0;
+}
+
+static void
+TrigTableRec_dealloc(TrigTableRec* self)
+{
+    free(self->data);
+    free(self->tempTrigsBuffer);
+    free(self->trigsBuffer);
+    TrigTableRec_clear(self);
+    self->ob_type->tp_free((PyObject*)self);
+}
+
+static PyObject * TrigTableRec_deleteStream(TrigTableRec *self) { DELETE_STREAM };
+
+static PyObject *
+TrigTableRec_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    int i;
+    TrigTableRec *self;
+    self = (TrigTableRec *)type->tp_alloc(type, 0);
+    
+    self->pointer = 0;
+    self->active = 0;
+    self->fadetime = 0.;
+    
+    INIT_OBJECT_COMMON
+    
+    Stream_setFunctionPtr(self->stream, TrigTableRec_compute_next_data_frame);
+    
+    return (PyObject *)self;
+}
+
+static int
+TrigTableRec_init(TrigTableRec *self, PyObject *args, PyObject *kwds)
+{
+    int i;
+    PyObject *inputtmp, *input_streamtmp, *trigtmp, *trig_streamtmp, *tabletmp;
+    
+    static char *kwlist[] = {"input", "trig", "table", "fadetime", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, TYPE_OOO_F, kwlist, &inputtmp, &trigtmp, &tabletmp, &self->fadetime))
+        return -1; 
+    
+    Py_XDECREF(self->input);
+    self->input = inputtmp;
+    input_streamtmp = PyObject_CallMethod((PyObject *)self->input, "_getStream", NULL);
+    Py_INCREF(input_streamtmp);
+    Py_XDECREF(self->input_stream);
+    self->input_stream = (Stream *)input_streamtmp;
+
+    Py_XDECREF(self->trig);
+    self->trig = trigtmp;
+    trig_streamtmp = PyObject_CallMethod((PyObject *)self->trig, "_getStream", NULL);
+    Py_INCREF(trig_streamtmp);
+    Py_XDECREF(self->trig_stream);
+    self->trig_stream = (Stream *)trig_streamtmp;
+    
+    Py_XDECREF(self->table);
+    self->table = (NewTable *)tabletmp;
+    
+    Py_INCREF(self->stream);
+    PyObject_CallMethod(self->server, "addStream", "O", self->stream);
+    
+    self->trigsBuffer = (MYFLT *)realloc(self->trigsBuffer, self->bufsize * sizeof(MYFLT));
+    self->tempTrigsBuffer = (MYFLT *)realloc(self->tempTrigsBuffer, self->bufsize * sizeof(MYFLT));
+    
+    for (i=0; i<self->bufsize; i++) {
+        self->trigsBuffer[i] = 0.0;
+    }    
+    
+    int size = PyInt_AsLong(NewTable_getSize((NewTable *)self->table));
+    if ((self->fadetime * self->sr) >= (size * 0.5))
+        self->fadetime = size * 0.499 / self->sr;
+    if (self->fadetime == 0.0)
+        self->fadeInSample = 0.0;
+    else
+        self->fadeInSample = MYROUND(self->fadetime * self->sr + 0.5);
+    
+    Py_INCREF(self);
+    return 0;
+}
+
+static PyObject * TrigTableRec_getServer(TrigTableRec* self) { GET_SERVER };
+static PyObject * TrigTableRec_getStream(TrigTableRec* self) { GET_STREAM };
+
+static PyObject * TrigTableRec_play(TrigTableRec *self, PyObject *args, PyObject *kwds) { PLAY };
+static PyObject * TrigTableRec_stop(TrigTableRec *self) { STOP };
+
+static PyObject *
+TrigTableRec_setTable(TrigTableRec *self, PyObject *arg)
+{
+	PyObject *tmp;
+	
+	if (arg == NULL) {
+		Py_INCREF(Py_None);
+		return Py_None;
+	}
+    
+	tmp = arg;
+    Py_INCREF(tmp);
+	Py_DECREF(self->table);
+    self->table = (NewTable *)tmp;
+    
+	Py_INCREF(Py_None);
+	return Py_None;
+}	
+
+MYFLT *
+TrigTableRec_getTrigsBuffer(TrigTableRec *self)
+{
+    int i;
+    for (i=0; i<self->bufsize; i++) {
+        self->tempTrigsBuffer[i] = self->trigsBuffer[i];
+        self->trigsBuffer[i] = 0.0;
+    }    
+    return (MYFLT *)self->tempTrigsBuffer;
+}    
+
+
+static PyMemberDef TrigTableRec_members[] = {
+    {"server", T_OBJECT_EX, offsetof(TrigTableRec, server), 0, "Pyo server."},
+    {"stream", T_OBJECT_EX, offsetof(TrigTableRec, stream), 0, "Stream object."},
+    {"input", T_OBJECT_EX, offsetof(TrigTableRec, input), 0, "Input sound object."},
+    {"trig", T_OBJECT_EX, offsetof(TrigTableRec, trig), 0, "Trigger object."},
+    {"table", T_OBJECT_EX, offsetof(TrigTableRec, table), 0, "Table to record in."},
+    {NULL}  /* Sentinel */
+};
+
+static PyMethodDef TrigTableRec_methods[] = {
+    {"getServer", (PyCFunction)TrigTableRec_getServer, METH_NOARGS, "Returns server object."},
+    {"_getStream", (PyCFunction)TrigTableRec_getStream, METH_NOARGS, "Returns stream object."},
+    {"deleteStream", (PyCFunction)TrigTableRec_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
+    {"setTable", (PyCFunction)TrigTableRec_setTable, METH_O, "Sets a new table."},
+    {"play", (PyCFunction)TrigTableRec_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
+    {"stop", (PyCFunction)TrigTableRec_stop, METH_NOARGS, "Stops computing."},
+    {NULL}  /* Sentinel */
+};
+
+PyTypeObject TrigTableRecType = {
+    PyObject_HEAD_INIT(NULL)
+    0,                         /*ob_size*/
+    "_pyo.TrigTableRec_base",         /*tp_name*/
+    sizeof(TrigTableRec),         /*tp_basicsize*/
+    0,                         /*tp_itemsize*/
+    (destructor)TrigTableRec_dealloc, /*tp_dealloc*/
+    0,                         /*tp_print*/
+    0,                         /*tp_getattr*/
+    0,                         /*tp_setattr*/
+    0,                         /*tp_compare*/
+    0,                         /*tp_repr*/
+    0,             /*tp_as_number*/
+    0,                         /*tp_as_sequence*/
+    0,                         /*tp_as_mapping*/
+    0,                         /*tp_hash */
+    0,                         /*tp_call*/
+    0,                         /*tp_str*/
+    0,                         /*tp_getattro*/
+    0,                         /*tp_setattro*/
+    0,                         /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES, /*tp_flags*/
+    "TrigTableRec objects. Record audio input in a table object.",           /* tp_doc */
+    (traverseproc)TrigTableRec_traverse,   /* tp_traverse */
+    (inquiry)TrigTableRec_clear,           /* tp_clear */
+    0,		               /* tp_richcompare */
+    0,		               /* tp_weaklistoffset */
+    0,		               /* tp_iter */
+    0,		               /* tp_iternext */
+    TrigTableRec_methods,             /* tp_methods */
+    TrigTableRec_members,             /* tp_members */
+    0,                      /* tp_getset */
+    0,                         /* tp_base */
+    0,                         /* tp_dict */
+    0,                         /* tp_descr_get */
+    0,                         /* tp_descr_set */
+    0,                         /* tp_dictoffset */
+    (initproc)TrigTableRec_init,      /* tp_init */
+    0,                         /* tp_alloc */
+    TrigTableRec_new,                 /* tp_new */
+};
+
+/************************************************************************************************/
+/* TrigTableRecTrig trig streamer */
+/************************************************************************************************/
+typedef struct {
+    pyo_audio_HEAD
+    TrigTableRec *mainReader;
+} TrigTableRecTrig;
+
+static void
+TrigTableRecTrig_compute_next_data_frame(TrigTableRecTrig *self)
+{
+    int i;
+    MYFLT *tmp;
+    tmp = TrigTableRec_getTrigsBuffer((TrigTableRec *)self->mainReader);
+    for (i=0; i<self->bufsize; i++) {
+        self->data[i] = tmp[i];
+    }
+}
+
+static int
+TrigTableRecTrig_traverse(TrigTableRecTrig *self, visitproc visit, void *arg)
+{
+    pyo_VISIT
+    Py_VISIT(self->mainReader);
+    return 0;
+}
+
+static int 
+TrigTableRecTrig_clear(TrigTableRecTrig *self)
+{
+    pyo_CLEAR
+    Py_CLEAR(self->mainReader);    
+    return 0;
+}
+
+static void
+TrigTableRecTrig_dealloc(TrigTableRecTrig* self)
+{
+    free(self->data);
+    TrigTableRecTrig_clear(self);
+    self->ob_type->tp_free((PyObject*)self);
+}
+
+static PyObject * TrigTableRecTrig_deleteStream(TrigTableRecTrig *self) { DELETE_STREAM };
+
+static PyObject *
+TrigTableRecTrig_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    int i;
+    TrigTableRecTrig *self;
+    self = (TrigTableRecTrig *)type->tp_alloc(type, 0);
+    
+    INIT_OBJECT_COMMON
+    Stream_setFunctionPtr(self->stream, TrigTableRecTrig_compute_next_data_frame);
+    
+    return (PyObject *)self;
+}
+
+static int
+TrigTableRecTrig_init(TrigTableRecTrig *self, PyObject *args, PyObject *kwds)
+{
+    PyObject *maintmp=NULL;
+    
+    static char *kwlist[] = {"mainReader", NULL};
+    
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O", kwlist, &maintmp))
+        return -1; 
+    
+    Py_XDECREF(self->mainReader);
+    Py_INCREF(maintmp);
+    self->mainReader = (TrigTableRec *)maintmp;
+    
+    Py_INCREF(self->stream);
+    PyObject_CallMethod(self->server, "addStream", "O", self->stream);
+    
+    Py_INCREF(self);
+    return 0;
+}
+
+static PyObject * TrigTableRecTrig_getServer(TrigTableRecTrig* self) { GET_SERVER };
+static PyObject * TrigTableRecTrig_getStream(TrigTableRecTrig* self) { GET_STREAM };
+
+static PyObject * TrigTableRecTrig_play(TrigTableRecTrig *self, PyObject *args, PyObject *kwds) { PLAY };
+static PyObject * TrigTableRecTrig_stop(TrigTableRecTrig *self) { STOP };
+
+static PyMemberDef TrigTableRecTrig_members[] = {
+    {"server", T_OBJECT_EX, offsetof(TrigTableRecTrig, server), 0, "Pyo server."},
+    {"stream", T_OBJECT_EX, offsetof(TrigTableRecTrig, stream), 0, "Stream object."},
+    {NULL}  /* Sentinel */
+};
+
+static PyMethodDef TrigTableRecTrig_methods[] = {
+    {"getServer", (PyCFunction)TrigTableRecTrig_getServer, METH_NOARGS, "Returns server object."},
+    {"_getStream", (PyCFunction)TrigTableRecTrig_getStream, METH_NOARGS, "Returns stream object."},
+    {"deleteStream", (PyCFunction)TrigTableRecTrig_deleteStream, METH_NOARGS, "Remove stream from server and delete the object."},
+    {"play", (PyCFunction)TrigTableRecTrig_play, METH_VARARGS|METH_KEYWORDS, "Starts computing without sending sound to soundcard."},
+    {"stop", (PyCFunction)TrigTableRecTrig_stop, METH_NOARGS, "Stops computing."},
+    {NULL}  /* Sentinel */
+};
+
+PyTypeObject TrigTableRecTrigType = {
+    PyObject_HEAD_INIT(NULL)
+    0,                         /*ob_size*/
+    "_pyo.TrigTableRecTrig_base",         /*tp_name*/
+    sizeof(TrigTableRecTrig),         /*tp_basicsize*/
+    0,                         /*tp_itemsize*/
+    (destructor)TrigTableRecTrig_dealloc, /*tp_dealloc*/
+    0,                         /*tp_print*/
+    0,                         /*tp_getattr*/
+    0,                         /*tp_setattr*/
+    0,                         /*tp_compare*/
+    0,                         /*tp_repr*/
+    0,             /*tp_as_number*/
+    0,                         /*tp_as_sequence*/
+    0,                         /*tp_as_mapping*/
+    0,                         /*tp_hash */
+    0,                         /*tp_call*/
+    0,                         /*tp_str*/
+    0,                         /*tp_getattro*/
+    0,                         /*tp_setattro*/
+    0,                         /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES,  /*tp_flags*/
+    "TrigTableRecTrig objects. Sends trigger at the end of playback.",           /* tp_doc */
+    (traverseproc)TrigTableRecTrig_traverse,   /* tp_traverse */
+    (inquiry)TrigTableRecTrig_clear,           /* tp_clear */
+    0,		               /* tp_richcompare */
+    0,		               /* tp_weaklistoffset */
+    0,		               /* tp_iter */
+    0,		               /* tp_iternext */
+    TrigTableRecTrig_methods,             /* tp_methods */
+    TrigTableRecTrig_members,             /* tp_members */
+    0,                      /* tp_getset */
+    0,                         /* tp_base */
+    0,                         /* tp_dict */
+    0,                         /* tp_descr_get */
+    0,                         /* tp_descr_set */
+    0,                         /* tp_dictoffset */
+    (initproc)TrigTableRecTrig_init,      /* tp_init */
+    0,                         /* tp_alloc */
+    TrigTableRecTrig_new,                 /* tp_new */
+};
